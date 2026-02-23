@@ -1,8 +1,8 @@
 import express from "express";
-import { protect } from "../middleware/AuthMiddleware";
-import { createRoom } from "../controllers/RoomController";
-import { createRoomSchema } from "../validation/RoomValidation";
-import { validate } from "../middleware/Validate";
+import { protect } from "../middleware/AuthMiddleware.js";
+import { createRoom } from "../controllers/RoomController.js";
+import { createRoomSchema } from "../validation/RoomValidation.js";
+import { validate } from "../middleware/Validate.js";
 
 
 const router = express.Router();

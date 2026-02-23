@@ -1,3 +1,4 @@
+import Room from "../models/Room.js";
 import Stroke from "../models/Stroke.js";
 
 export default function canvasSocket(io) {
@@ -7,25 +8,69 @@ export default function canvasSocket(io) {
     // ---------------------------
     // Join Room + Send History
     // ---------------------------
-    socket.on("joinRoom", async (roomId) => {
-      socket.join(roomId);
+    socket.on("joinRoom", async ({ roomId }) => {
+      try {
+        const room = await Room.findById(roomId);
 
-      const strokes = await Stroke.find({
-        roomId,
-        isDeleted: false,
-      });
+        if (!room) {
+          return socket.emit("error", "Room not found");
+        }
 
-      socket.emit("roomHistory", strokes);
+        const userId = socket.user._id;
 
-      console.log(`${socket.id} joined ${roomId}`);
+        // Check if already member
+        const isMember = room.members.some(
+          (member) => member.toString() === userId.toString(),
+        );
+
+        // Add member if not already in room
+        if (!isMember) {
+          room.members.push(userId);
+          await room.save();
+        }
+
+        socket.join(roomId);
+
+        // Notify others
+        socket.to(roomId).emit("userJoined", {
+          userId,
+          username: socket.user.username,
+        });
+
+        // Send history
+        const strokes = await Stroke.find({
+          roomId,
+          isDeleted: false,
+        });
+
+        socket.emit("roomHistory", strokes);
+      } catch (err) {
+        socket.emit("error", "Something went wrong");
+      }
     });
 
     // ---------------------------
     // Leave Room
     // ---------------------------
-    socket.on("leaveRoom", (roomId) => {
+    socket.on("leaveRoom", async (roomId) => {
+      const userId = socket.user._id;
+      const room = await Room.findById(roomId);
+
+     if (!room) {
+        return socket.emit("error", "Room not found");
+      }
+      // Remove member
+      room.members = room.members.filter(
+        (member) => member.toString() !== userId.toString(),
+      );
+      await room.save();
+
       socket.leave(roomId);
-      console.log(`${socket.id} left ${roomId}`);
+
+      socket.to(roomId).emit("userLeft", {
+        userId: socket.user._id,
+        username: socket.user.username,
+      });
     });
 
     // ---------------------------

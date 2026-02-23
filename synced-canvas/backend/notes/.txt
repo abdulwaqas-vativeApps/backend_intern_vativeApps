@@ -1,0 +1,5 @@
+ab mujeh ye krna h k jo user room create kry to us ko us room k memebers m bhi add krna h 
+ab ye kam m kis trhn krun
+kia jab user room create krny k lien request bhj to kia usi request m socket k through us user ko us room ki chat emit kr dun jo k nhe hongi q k user ne abhi abhi room create kia h, aur room join bhi kr wa dun aur sab users ko emit bhi kr dun k ap k room m naya user aya h taky poray room ko pta chal gye
+
+ya phir fontend se srif createdRoom ka function call krun aur us k bad room join ka socket event alag se call krun aur us event m bhi wo sare kam ho gyn gy
