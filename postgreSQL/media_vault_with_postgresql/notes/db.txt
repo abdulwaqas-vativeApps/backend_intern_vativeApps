@@ -1,0 +1,169 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+//
+// ENUMS
+//
+
+enum auth_provider {
+  LOCAL
+  GOOGLE
+}
+
+enum user_status {
+  ACTIVE
+  INACTIVE
+}
+
+enum media_asset_type {
+  PROFILE_PICTURE
+  COMPANY_LOGO
+}
+
+//
+// 1️⃣ USERS
+//
+
+model users {
+  id                 String        @id @default(uuid())
+  email              String        @unique
+  password_hash      String?
+  provider           auth_provider
+  status             user_status   @default(ACTIVE)
+  is_email_verified  Boolean       @default(false)
+
+  created_at         DateTime      @default(now())
+  updated_at         DateTime      @updatedAt
+
+  profile            profiles?
+  sessions           sessions[]
+  media_assets       media_assets[]
+  user_role         user_role
+  audit_logs_actor   audit_logs[]  @relation("actor_logs")
+  audit_logs_target  audit_logs[]  @relation("target_logs")
+}
+
+//
+// 2️⃣ ROLES
+//
+
+model roles {
+  id          String      @id @default(uuid())
+  name        String      @unique
+  description String?
+  created_at  DateTime    @default(now())
+
+  user_role  user_role
+}
+
+//
+// 3️⃣ USER_ROLE
+//
+
+model user_role {
+  id           String   @id @default(uuid())
+  user_id      String   @unique
+  role_id      String 
+  assigned_at  DateTime @default(now())
+
+  users        users    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  roles        roles    @relation(fields: [role_id], references: [id], onDelete: Cascade)
+
+
+  @@index([user_id])
+  @@index([role_id])
+}
+
+//
+// 4️⃣ PROFILES
+//
+
+model profiles {
+  id              String   @id @default(uuid())
+  user_id         String   @unique
+
+  full_name       String
+  designation     String?
+  contact_number  String?
+  connect_me_for  String?
+  company_name    String?
+
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  user           users    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([designation])
+  @@index([company_name])
+}
+
+//
+// 5️⃣ SESSIONS
+//
+
+model sessions {
+  id                  String   @id @default(uuid())
+  user_id             String
+
+  refresh_token_hash  String
+  user_agent          String?
+  ip_address          String?
+  is_active           Boolean  @default(true)
+  expires_at          DateTime
+
+  created_at          DateTime @default(now())
+
+  user               users    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([expires_at])
+}
+
+//
+// 6️⃣ MEDIA_ASSETS
+//
+
+model media_assets {
+  id             String            @id @default(uuid())
+  user_id        String
+
+  asset_type     media_asset_type
+  s3_key         String
+  cdn_url        String
+  mime_type      String
+  size_in_bytes  Int
+
+  is_active      Boolean           @default(true)
+  created_at     DateTime          @default(now())
+
+  user          users             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([asset_type])
+}
+
+//
+// 7️⃣ AUDIT_LOGS
+//
+
+model audit_logs {
+  id              String   @id @default(uuid())
+  actor_id        String?
+  action_type     String
+  target_user_id  String?
+  metadata        Json?
+
+  created_at      DateTime @default(now())
+
+  actor           users?   @relation("actor_logs", fields: [actor_id], references: [id])
+  target          users?   @relation("target_logs", fields: [target_user_id], references: [id])
+
+  @@index([actor_id])
+  @@index([target_user_id])
+}

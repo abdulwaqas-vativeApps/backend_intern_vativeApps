@@ -1,0 +1,6 @@
+DELETE FROM sessions WHERE expires_at < now()
+proper error logs 
+swagger for api doc 
+unit testing
+joi and sanitization
+deployement on ec2
