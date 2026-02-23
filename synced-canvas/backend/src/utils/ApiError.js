@@ -2,6 +2,6 @@ export class ApiError extends Error {
   constructor(statusCode, message) {
     super(message);
     this.statusCode = statusCode;
-    this.isOperational = true; // useful for error handling middleware
+    // this.isOperational = true; // useful for error handling middleware
   }
 }
