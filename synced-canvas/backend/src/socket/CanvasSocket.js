@@ -89,15 +89,13 @@ export default function canvasSocket(io) {
     socket.on(
       "strokePoint",
       ({ roomId, point, strokeId, color, brushSize }) => {
-        socket
-          .to(roomId)
-          .emit("strokePoint", {
-            userId: socket.user._id,
-            strokeId,
-            point,
-            color,
-            brushSize,
-          });
+        socket.to(roomId).emit("strokePoint", {
+          userId: socket.user._id,
+          strokeId,
+          point,
+          color,
+          brushSize,
+        });
       },
     );
 
@@ -128,38 +126,59 @@ export default function canvasSocket(io) {
     // Undo (Soft Delete)
     // ---------------------------
     socket.on("undo", async ({ roomId, strokeId }) => {
-      await Stroke.updateOne({ strokeId }, { isDeleted: true });
+      try {
+        const stroke = await Stroke.findOne({
+          strokeId,
+          userId: socket.user._id,
+        });
+        if (!stroke)
+          return socket.emit("error", "Stroke not found or not yours");
 
-      io.to(roomId).emit("undo", { strokeId });
+        stroke.isDeleted = true;
+        await stroke.save();
+
+        io.to(roomId).emit("undo", { strokeId });
+      } catch (err) {
+        socket.emit("error", "Unable to undo stroke");
+      }
     });
 
     // ---------------------------
     // Redo (Restore Last Deleted Stroke of User)
     // ---------------------------
-    socket.on("redo", async ({ roomId, userId }) => {
-      const lastDeleted = await Stroke.findOne({
-        roomId,
-        userId,
-        isDeleted: true,
-      }).sort({ updatedAt: -1 });
+    socket.on("redo", async ({ roomId }) => {
+      try {
+        const lastDeleted = await Stroke.findOne({
+          roomId,
+          userId: socket.user._id,
+          isDeleted: true,
+        }).sort({ updatedAt: -1 });
 
-      if (!lastDeleted) return;
+        if (!lastDeleted) return socket.emit("error", "No stroke to redo");
 
-      lastDeleted.isDeleted = false;
-      await lastDeleted.save();
+        lastDeleted.isDeleted = false;
+        await lastDeleted.save();
 
-      io.to(roomId).emit("strokeComplete", lastDeleted);
+        io.to(roomId).emit("strokeComplete", {
+          ...lastDeleted.toObject(),
+          strokeId: lastDeleted.strokeId,
+        });
+      } catch (err) {
+        socket.emit("error", "Unable to redo stroke");
+      }
     });
 
     // ---------------------------
     // Clear (Soft Delete All)
     // ---------------------------
     socket.on("clear", async ({ roomId }) => {
-      await Stroke.updateMany({ roomId }, { isDeleted: true });
-
-      io.to(roomId).emit("clear");
+      try {
+        await Stroke.updateMany({ roomId }, { isDeleted: true });
+        io.to(roomId).emit("clear");
+      } catch (err) {
+        socket.emit("error", "Unable to clear strokes");
+      }
     });
-
     // ---------------------------
     // Disconnect
     // ---------------------------
