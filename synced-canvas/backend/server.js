@@ -1,77 +1,40 @@
 import express from "express";
 import http from "http";
 import { Server } from "socket.io";
-import cors from "cors";
+import dotenv from "dotenv";
+import { connectDB } from "./config/db.js";
+import canvasSocket from "./src/socket/CanvasSocket.js";
+import userRoutes from "./src/routes/userRoutes.js";
+
+dotenv.config();
+await connectDB();
 
 const app = express();
-app.use(cors());
-
 const server = http.createServer(app);
 
 const io = new Server(server, {
-  cors: {
-    origin: "http://localhost:5173",
-    methods: ["GET", "POST"],
-  },
-});
- 
-// Socket.IO Connection
-io.on("connection", (socket) => {
-  console.log("User connected:", socket.id);
-
-  // Join Room
-  socket.on("joinRoom", (roomId) => {
-    socket.join(roomId);
-    console.log(`${socket.id} joined ${roomId}`);
-  });
-
-  // Leave Room
-  socket.on("leaveRoom", (roomId) => {
-    socket.leave(roomId);
-    console.log(`${socket.id} left ${roomId}`);
-  });
-
-  // Stroke Start
-  socket.on("strokeStart", ({ roomId, userId, strokeId, point }) => {
-    socket.to(roomId).emit("strokeStart", { userId, strokeId, point });
-  });
-
-  // Stroke Point (streaming)
-  socket.on("strokePoint", ({ roomId, userId, point, color, brushSize }) => {
-    socket.to(roomId).emit("strokePoint", {
-      userId,
-      point,
-      color,
-      brushSize,
-    });
-  });
-
-  // Stroke End
-  socket.on("strokeEnd", ({ roomId, userId, color, brushSize }) => {
-    socket.to(roomId).emit("strokeEnd", { userId, color, brushSize });
-  });
-
-  // Undo
-  socket.on("undo", ({ roomId, strokeId }) => {
-    socket.to(roomId).emit("undo", { strokeId });
-  });
-
-  // Redo
-  socket.on("redo", ({ roomId, userId }) => {
-    socket.to(roomId).emit("redo", { userId });
-  });
-
-  // Clear
-  socket.on("clear", ({ roomId }) => {
-    socket.to(roomId).emit("clear");
-  });
-
-  // Disconnect
-  socket.on("disconnect", () => {
-    console.log("User disconnected:", socket.id);
-  });
+  cors: { origin: "*" }
 });
 
-server.listen(5000, () => {
-  console.log("Server running on port 5000");
+canvasSocket(io);
+
+app.use(express.json());
+
+// ---------------------------
+// Routes
+// ---------------------------
+
+app.use("/api/auth", userRoutes);
+
+app.use((err, req, res, next) => {
+  if (err.isOperational) {
+    return res.status(err.statusCode).json({ success: false, message: err.message });
+  }
+
+  console.error(err);
+  return res.status(500).json({ success: false, message: "Internal Server Error" });
 });
+
+server.listen(5000, () =>
+  console.log("Server running on 5000")
+);
