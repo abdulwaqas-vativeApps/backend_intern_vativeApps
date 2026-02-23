@@ -56,7 +56,7 @@ export default function canvasSocket(io) {
       const userId = socket.user._id;
       const room = await Room.findById(roomId);
 
-     if (!room) {
+      if (!room) {
         return socket.emit("error", "Room not found");
       }
       // Remove member
@@ -74,48 +74,53 @@ export default function canvasSocket(io) {
     });
 
     // ---------------------------
-    // Stroke Start (realtime only)
+    // Stroke Start (Emit to others in room)
     // ---------------------------
-    socket.on("strokeStart", ({ roomId, userId, strokeId, point }) => {
-      socket.to(roomId).emit("strokeStart", {
-        userId,
-        strokeId,
-        point,
-      });
+    socket.on("strokeStart", ({ roomId, point, strokeId }) => {
+      // Emit to others in room
+      socket
+        .to(roomId)
+        .emit("strokeStart", { userId: socket.user._id, strokeId, point });
     });
 
-    // ---------------------------
-    // Stroke Streaming Points
-    // ---------------------------
+    //----------------------------
+    // Stroke Point (Emit to others in room)
+    //----------------------------
     socket.on(
       "strokePoint",
-      ({ roomId, userId, strokeId, point, color, brushSize }) => {
-        socket.to(roomId).emit("strokePoint", {
-          userId,
-          strokeId,
-          point,
-          color,
-          brushSize,
-        });
+      ({ roomId, point, strokeId, color, brushSize }) => {
+        socket
+          .to(roomId)
+          .emit("strokePoint", {
+            userId: socket.user._id,
+            strokeId,
+            point,
+            color,
+            brushSize,
+          });
       },
     );
 
-    // ---------------------------
-    // Stroke End → SAVE IN DB
-    // ---------------------------
+    //----------------------------
+    // Stroke End (Save to DB and Emit to others in room)
+    //----------------------------
     socket.on(
       "strokeEnd",
-      async ({ roomId, userId, strokeId, points, color, brushSize }) => {
+      async ({ roomId, points, strokeId, color, brushSize }) => {
         const newStroke = await Stroke.create({
-          strokeId,
+          strokeId, // frontend strokeId
           roomId,
-          userId,
+          userId: socket.user._id,
           points,
           color,
           width: brushSize,
         });
 
-        io.to(roomId).emit("strokeComplete", newStroke);
+        // Emit strokeComplete with DB _id + strokeId
+        io.to(roomId).emit("strokeComplete", {
+          ...newStroke.toObject(),
+          strokeId: newStroke.strokeId, // keep frontend strokeId
+        });
       },
     );
 
