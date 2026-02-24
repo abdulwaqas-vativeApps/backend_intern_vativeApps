@@ -1,7 +1,7 @@
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
-import { generateToken } from "../utils/generateToken.js";
-import { sendResponse } from "../utils/sendResponse.js";
+import { generateToken } from "../utils/GenerateToken.js";
+import { sendResponse } from "../utils/SendResponse.js";
 import { ApiError } from "../utils/ApiError.js";
 
 export const signup = async (req, res, next) => {
