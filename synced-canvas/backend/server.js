@@ -1,8 +1,9 @@
 import express from "express";
+import cors from "cors";
 import http from "http";
 import { Server } from "socket.io";
 import dotenv from "dotenv";
-import { connectDB } from "./src/config/db.js";
+import { connectDB } from "./src/config/db.js";     
 import canvasSocket from "./src/socket/CanvasSocket.js";
 import userRoutes from "./src/routes/UserRoutes.js";
 import { globalErrorHandler } from "./src/middleware/GlobalError.js";
@@ -22,7 +23,7 @@ const server = http.createServer(app);
 // Socket.io setup with JWT authentication
 // ---------------------------
 const io = new Server(server, {
-  cors: { origin: "*" },
+  cors: { origin: "http://localhost:5173", methods: ["GET", "POST"] },
 });
 
 io.use(async (socket, next) => {
@@ -46,6 +47,13 @@ io.use(async (socket, next) => {
 
 canvasSocket(io);
 
+app.use(cors(
+  {
+    origin: "http://localhost:5173", // Adjust as needed
+    // methods: ["GET", "POST"],
+    // allowedHeaders: ["Content-Type", "Authorization"],
+  }
+));
 app.use(express.json());
 
 // ---------------------------
@@ -58,7 +66,7 @@ app.use("/api/rooms", roomRoutes);
 // Route not found Handler
 // ---------------------------
 app.use((req, res, next) => {
-  next(new ApiError(404, "Route not found"));
+  next(new ApiError(404, "Route not found")); 
 });
 
 app.use(globalErrorHandler);
