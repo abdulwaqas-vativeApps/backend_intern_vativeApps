@@ -3,7 +3,7 @@ import Stroke from "../models/Stroke.js";
 
 export default function canvasSocket(io) {
   io.on("connection", (socket) => {
-    console.log("User connected:", socket.id);
+    console.log("User connected:", socket.id, "name:", socket.user?.username);
 
     // ---------------------------
     // Join Room + Send History
@@ -90,7 +90,7 @@ export default function canvasSocket(io) {
     // ---------------------------
     // Stroke Start (Emit to others in room)
     // ---------------------------
-    socket.on("strokeStart", ({ roomId, point, strokeId }) => {
+    socket.on("strokeStart", ({ roomId, strokeId, point }) => {
       try {
         if (!socket.user) {
           return socket.emit("error", "Not authenticated");
@@ -102,7 +102,7 @@ export default function canvasSocket(io) {
           point,
         });
       } catch (err) {
-        console.error("strokeStart error:", err.message);
+        // console.error("strokeStart error:", err.message);
         socket.emit("error", "Failed to start stroke");
       }
     });
@@ -112,17 +112,30 @@ export default function canvasSocket(io) {
     //----------------------------
     socket.on(
       "strokePoint",
-      ({ roomId, point, strokeId, color, brushSize }) => {
+      ({ roomId,strokeId, color, brushSize, point }) => {
         try {
           if (!socket.user) {
             return socket.emit("error", "Not authenticated");
           }
+          console.log(
+            "🎨 strokePoint received ",
+            "userId:",
+            socket.user._id.toString(),
+            "strokeId:",
+            strokeId,
+            "color:",
+            color,
+            "brushSize:",
+            brushSize,
+            "point:",
+            point,
+          );
           socket.to(roomId).emit("strokePoint", {
             userId: socket.user._id.toString(),
             strokeId,
-            point,
             color,
             brushSize,
+            point,
           });
         } catch (err) {
           console.error("strokePoint error:", err.message);
@@ -136,7 +149,7 @@ export default function canvasSocket(io) {
     //----------------------------
     socket.on(
       "strokeEnd",
-      async ({ roomId, points, strokeId, color, brushSize }) => {
+      async ({ roomId, strokeId, color, brushSize,points }) => {
         try {
           if (!socket.user) {
             return socket.emit("error", "Not authenticated");
@@ -145,15 +158,17 @@ export default function canvasSocket(io) {
             strokeId, // frontend strokeId
             roomId,
             userId: socket.user._id,
-            points,
             color,
             width: brushSize,
+            points
           });
+
+          console.log("🎨 New stroke created:", newStroke);
 
           // Emit strokeComplete with DB _id + strokeId to ALL users in room (including sender)
           io.to(roomId).emit("strokeComplete", {
             ...newStroke.toObject(),
-            strokeId: newStroke.strokeId, // keep frontend strokeId
+            strokeId: newStroke.strokeId, // frontend strokeId for matching
           });
         } catch (err) {
           console.error("strokeEnd error:", err.message);
@@ -161,7 +176,7 @@ export default function canvasSocket(io) {
         }
       },
     );
-
+ 
     // ---------------------------
     // Undo (Soft Delete)
     // ---------------------------
@@ -187,7 +202,7 @@ export default function canvasSocket(io) {
         stroke.isDeleted = true;
         await stroke.save();
 
-        console.log(`↶ Undo for strokeId:`, strokeId);
+        // console.log(`↶ Undo for strokeId:`, strokeId);
         io.to(roomId).emit("undo", { strokeId });
       } catch (err) {
         console.error("undo error:", err.message);

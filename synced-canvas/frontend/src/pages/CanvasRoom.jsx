@@ -2,7 +2,7 @@ import { useRef, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useCanvasStore } from "../store/canvasStore";
 import { socket } from "../socket/socket";
-import jwt_decode from "jwt-decode";
+import { jwtDecode } from "jwt-decode";
 import {
   startDrawing,
   draw,
@@ -11,7 +11,6 @@ import {
   joinRoom as joinRoomUtil,
   undoLastStroke,
   redoLastStroke,
-
 } from "../utils/canvasUtils";
 
 export default function CanvasRoom() {
@@ -45,27 +44,27 @@ export default function CanvasRoom() {
   // SOCKET EVENTS
   // ===============================
   useEffect(() => {
-
- const token = localStorage.getItem("token");
-  if (token) {
-    try {
-      const decodedUser = jwt_decode(token);
-      setUser(decodedUser);
-    } catch (err) {
-      console.error("Invalid token:", err);
+    const token = localStorage.getItem("token");
+    if (token) {
+      try {
+        const decodedUser = jwtDecode(token);
+        setUser(decodedUser);
+      } catch (err) {
+        console.error("Invalid token:", err);
+        Navigate("/login");
+      }
+    } else {
       Navigate("/login");
     }
-  } else {
-    Navigate("/login");
-  }
 
     socket.on("roomMembers", (members) => {
-      console.log("Updated members:", members);
+      // console.log("Updated members:", members);
 
       setRoomMembers(members);
     });
 
-    socket.on("roomInfo", ({ room }) => {
+    socket.on("roomInfo", (room) => {
+      // console.log("Received room info:", room);
       setCurrentRoom(room);
     });
 
@@ -74,30 +73,55 @@ export default function CanvasRoom() {
     });
 
     socket.on("strokeStart", ({ userId, strokeId, point }) => {
+      console.log(
+        "🎨 strokeStart received ",
+
+        "userId:",
+        userId,
+        "strokeId:",
+        strokeId,
+        "point:",
+        point,
+      );
       startStroke({ userId, strokeId, point });
       const ctx = canvasRef.current.getContext("2d");
       ctx.beginPath();
       ctx.moveTo(point.x, point.y);
     });
 
-    socket.on("strokePoint", ({userId, point, color, brushSize }) => {
-      const store = useCanvasStore.getState();
-      if (!store.currentStrokes[userId]) return;
+    socket.on(
+      "strokePoint",
+      ({ userId, strokeId, color, brushSize, point }) => {
+        const store = useCanvasStore.getState();
+        if (!store.currentStrokes[userId]) return;
 
-      const ctx = canvasRef.current.getContext("2d");
-      ctx.strokeStyle = color;
-      ctx.lineWidth = brushSize;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
+        const ctx = canvasRef.current.getContext("2d");
+        ctx.strokeStyle = color;
+        ctx.lineWidth = brushSize;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
 
-      ctx.lineTo(point.x, point.y);
-      ctx.stroke();
+        ctx.lineTo(point.x, point.y);
+        ctx.stroke();
 
-      addPoint({ userId, point });
-    });
+        console.log(
+          "🎨 strokePoint received ",
+          "userId:",
+          userId,
+          "strokeId:",
+          strokeId,
+          "point:",
+          point,
+        );
+        addPoint({ userId, strokeId, point });
 
-    socket.on("strokeEnd", ({ userId, color, brushSize }) => {
-      endStroke({ userId, color, brushSize });
+      },
+    );
+
+    socket.on("strokeComplete", (stroke) => {
+
+      endStroke(stroke);
+      console.log("🎨 strokeComplete received", stroke);
     });
 
     socket.on("undo", ({ strokeId }) => {
@@ -105,7 +129,7 @@ export default function CanvasRoom() {
         console.error("Received undo event with no strokeId");
         return;
       }
-      console.log("↶ Undo received for strokeId:", strokeId);
+      // console.log("↶ Undo received for strokeId:", strokeId);
       undo(strokeId);
     });
 
@@ -114,18 +138,11 @@ export default function CanvasRoom() {
         console.error("Received redo event with no stroke");
         return;
       }
-      console.log("↻ Redo received for strokeId:", stroke.strokeId);
+      // console.log("↻ Redo received for strokeId:", stroke.strokeId);
       redo(stroke);
     });
 
-    socket.on("strokeComplete", (stroke) => {
-      if (!stroke || !stroke.strokeId) {
-        console.error("Received invalid strokeComplete:", stroke);
-        return;
-      }
-      console.log("Received strokeComplete:", stroke.strokeId);
-      redo(stroke);
-    });
+
     socket.on("clear", () => clear());
     socket.on("roomHistory", (strokes) => {
       setStrokes(strokes);
@@ -136,16 +153,16 @@ export default function CanvasRoom() {
       socket.off("error");
       socket.off("strokeStart");
       socket.off("strokePoint");
-      socket.off("strokeEnd");
-      socket.off("undo");
       socket.off("strokeComplete");
+      socket.off("undo");
       socket.off("clear");
       socket.off("roomHistory");
       socket.off("roomMembers");
     };
   }, []);
 
-  console.log("Current User:", user);
+  // console.log("Current User:", user);
+  // console.log("Current Room:", currentRoom);
 
   // ===============================
   // CANVAS SETUP
@@ -172,7 +189,7 @@ export default function CanvasRoom() {
   // ===============================
   useEffect(() => {
     if (roomId) {
-      console.log("Attempting to join room: clear ========>", clear);
+      // console.log("Attempting to join room: clear ========>", clear);
       joinRoomUtil(roomId, currentRoom?.id, clear);
     }
   }, [roomId]);
@@ -180,10 +197,10 @@ export default function CanvasRoom() {
   return (
     <div style={{ padding: "20px" }}>
       <h2>Synced Canvas - Room: {currentRoom?.name}</h2>
-      <h2>Total Members: {currentRoom?.members?.length || 0}</h2>
+      <h2>Total Members: {roomMembers.length || 0}</h2>
       <h3>Active Users List</h3>
       <ul>
-        {currentRoom?.members?.map((member) => (
+        {roomMembers.map((member) => (
           <li key={member._id}>{member.username}</li>
         ))}
       </ul>
@@ -209,7 +226,7 @@ export default function CanvasRoom() {
         <button
           onClick={() => {
             clear();
-            socket.emit("clear", { roomId: currentRoom });
+            socket.emit("clear", { roomId: currentRoom?.id });
           }}
         >
           Clear
@@ -222,7 +239,7 @@ export default function CanvasRoom() {
         height={500}
         style={{ border: "2px solid black", background: "black" }}
         onMouseDown={(e) =>
-          startDrawing(e, setIsDrawing, startStroke, canvasRef, currentRoom)
+          startDrawing(e, setIsDrawing, startStroke, canvasRef, currentRoom?.id)
         }
         onMouseMove={(e) =>
           draw(
@@ -234,14 +251,14 @@ export default function CanvasRoom() {
             brushSize,
             addPoint,
             canvasRef,
-            currentRoom,
+            currentRoom?.id,
           )
         }
         onMouseUp={() =>
-          stopDrawing(setIsDrawing, endStroke, color, brushSize, currentRoom)
+          stopDrawing(setIsDrawing, endStroke, color, brushSize, currentRoom?.id)
         }
         onMouseLeave={() =>
-          stopDrawing(setIsDrawing, endStroke, color, brushSize, currentRoom)
+          stopDrawing(setIsDrawing, endStroke, color, brushSize, currentRoom?.id)
         }
       />
     </div>

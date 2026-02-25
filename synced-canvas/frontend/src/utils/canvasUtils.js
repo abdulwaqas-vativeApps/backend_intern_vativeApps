@@ -1,7 +1,6 @@
 import { useCanvasStore } from "../store/canvasStore";
 import { socket } from "../socket/socket";
 
-
 // ===============================
 // find the last stroke ID of a user (used for undo functionality)
 // ===============================
@@ -62,7 +61,7 @@ export const redoLastStroke = (redo, currentRoom) => {
 // ===============================
 export const joinRoom = (roomId, currentRoomId, clear) => {
   if (!roomId.trim()) return;
-  
+
   if (currentRoomId && currentRoomId !== roomId) {
     socket.emit("leaveRoom", currentRoomId);
   }
@@ -71,7 +70,6 @@ export const joinRoom = (roomId, currentRoomId, clear) => {
   socket.emit("joinRoom", { roomId });
 
   clear();
-  
 };
 
 // ===============================
@@ -82,15 +80,13 @@ export const startDrawing = (
   setIsDrawing,
   startStroke,
   canvasRef,
-  currentRoom,
+  currentRoomId,
 ) => {
   const store = useCanvasStore.getState();
   const userId = store.user.id;
 
   if (!userId) {
-    console.warn(
-      "⚠ Cannot draw - userId not set. Room might not be joined yet.",
-    );
+    console.log("Cannot start stroke - userId not found");
     return;
   }
 
@@ -108,18 +104,27 @@ export const startDrawing = (
   ctx.beginPath();
   ctx.moveTo(x, y);
 
-  console.log(
-    "🎨 strokeStart sent for room:",
-    currentRoom,
-    "strokeId:",
-    strokeId,
-  );
+  // console.log(
+  //   "🎨 strokeStart sent for room:",
+  //   currentRoomId,
+  //   "strokeId:",
+  //   strokeId,
+  // );
   socket.emit("strokeStart", {
-    roomId: currentRoom,
-    userId,
+    roomId: currentRoomId,
     strokeId,
     point: { x, y },
   });
+
+  console.log(
+    "🎨 strokeStart emitted",
+    "userId:",
+    userId,
+    "strokeId:",
+    strokeId,
+    "point:",
+    { x, y },
+  );
 };
 
 // ===============================
@@ -134,15 +139,22 @@ export const draw = (
   brushSize,
   addPoint,
   canvasRef,
-  currentRoom,
+  currentRoomId,
 ) => {
   if (!isDrawing) return;
 
   const store = useCanvasStore.getState();
   const userId = store.user.id;
+  const strokeId = store.currentStrokes[userId]?.strokeId;
+
+  console.log("store.currentStrokes[userId]", store.currentStrokes[userId]);
+  console.log(
+    "store.currentStrokes[userId]?.strokeId",
+    store.currentStrokes[userId]?.strokeId,
+  );
 
   if (!userId) {
-    console.warn("⚠ Cannot draw - userId not set");
+    console.log("Cannot add point - userId not found");
     return;
   }
 
@@ -165,15 +177,25 @@ export const draw = (
     ctx.lineTo(point.x, point.y);
     ctx.stroke();
 
-    addPoint({ userId, point });
+    addPoint({ userId, strokeId, point });
 
     socket.emit("strokePoint", {
-      roomId: currentRoom,
-      userId,
-      point,
+      roomId: currentRoomId,
+      strokeId,
       color,
       brushSize,
+      point,
     });
+
+    console.log(
+      "🎨 strokePoint emitted",
+      "userId:",
+      userId,
+      "strokeId:",
+      strokeId,
+      "point:",
+      point,
+    );
 
     animationFrameRef.current = null;
   });
@@ -187,7 +209,7 @@ export const stopDrawing = (
   endStroke,
   color,
   brushSize,
-  currentRoom,
+  currentRoomId,
 ) => {
   setIsDrawing(false);
 
@@ -199,24 +221,28 @@ export const stopDrawing = (
   if (currentStroke) {
     const { strokeId, points } = currentStroke;
 
-    console.log(
-      "✏ strokeEnd sent for strokeId:",
-      strokeId,
-      "points:",
-      points.length,
-    );
-
-    if (typeof endStroke === "function") {
-      endStroke({ userId, color, brushSize });
-    }
+    endStroke({ userId, strokeId, color, brushSize, points });
 
     socket.emit("strokeEnd", {
-      roomId: currentRoom,
+      roomId: currentRoomId,
       strokeId,
-      points,
       color,
       brushSize,
+      points,
     });
+
+    console.log(
+      "🎨 strokeEnd emitted",
+     
+      "strokeId:",
+      strokeId,
+      "color:",
+      color,
+      "brushSize:",
+      brushSize,
+      "points:",
+      points,
+      );
   }
 };
 
