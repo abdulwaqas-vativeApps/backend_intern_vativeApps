@@ -35,22 +35,20 @@ export default function canvasSocket(io) {
         }
 
         // IMPORTANT: Populate AFTER update
-        room = await Room.findById(roomId).populate(
-          "members",
-          "username email",
-        );
+        room = await Room.findById(roomId)
+          .populate("members", "username email")
+          .populate("createdBy", "username email");
 
         socket.join(roomId);
-
-        console.log(`✓ ${socket.user.username} joined room ${room.name}`);
 
         // Notify others (only new join)
         io.to(roomId).emit("roomUsers", room.members);
 
         // Send room info WITH populated members
         socket.emit("roomInfo", {
-          userId: userId.toString(),
-          room,
+          id: room._id,
+          name: room.name,
+          createdBy: room.createdBy,
         });
 
         // Send strokes history
@@ -253,33 +251,33 @@ export default function canvasSocket(io) {
     // ---------------------------
     // Disconnect
     // ---------------------------
- socket.on("disconnect", async () => {
-    console.log("✗ User disconnected:", socket.id);
-    if (!socket.user) return;
+    socket.on("disconnect", async () => {
+      console.log("✗ User disconnected:", socket.id);
+      if (!socket.user) return;
 
-    const userId = socket.user._id;
+      const userId = socket.user._id;
 
-    // Find all rooms user was in
-    const rooms = await Room.find({ members: userId });
+      // Find all rooms user was in
+      const rooms = await Room.find({ members: userId });
 
-    for (let room of rooms) {
-      // Remove user from members
-      room.members = room.members.filter(
-        (member) => member.toString() !== userId.toString()
-      );
-      await room.save();
+      for (let room of rooms) {
+        // Remove user from members
+        room.members = room.members.filter(
+          (member) => member.toString() !== userId.toString(),
+        );
+        await room.save();
 
-      // Populate members after update
-      const updatedRoom = await Room.findById(room._id).populate(
-        "members",
-        "username email"
-      );
+        // Populate members after update
+        const updatedRoom = await Room.findById(room._id).populate(
+          "members",
+          "username email",
+        );
 
-      // Notify other users in that room
-      io.to(room._id.toString()).emit("roomUsers", updatedRoom.members);
-    }
+        // Notify other users in that room
+        io.to(room._id.toString()).emit("roomUsers", updatedRoom.members);
+      }
 
-    console.log("  User was:", socket.user.username, `(${userId})`);
-  });
+      console.log("  User was:", socket.user.username, `(${userId})`);
+    });
   });
 }
