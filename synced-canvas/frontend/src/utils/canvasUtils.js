@@ -59,17 +59,18 @@ export const redoLastStroke = (redo, currentRoom) => {
 // ===============================
 // ROOM JOINING
 // ===============================
-export const joinRoom = (roomId, setCurrentRoom, clear, setStrokes) => {
-  if (!roomId.trim()) return;
+export const joinRoom = (roomId, currentRoomId,clear  ,setStrokes) => {
+  if (!roomId.trim()) return; 
 
-  const currentRoom = useCanvasStore.getState().currentRoom;
-  if (currentRoom) {
-    socket.emit("leaveRoom", currentRoom);
+  console.log("clear =========:", clear);
+
+    if (currentRoomId && currentRoomId !== roomId) {
+    socket.emit("leaveRoom", currentRoomId);
   }
 
   console.log("📍 Joining room:", roomId);
   socket.emit("joinRoom", { roomId });
-  setCurrentRoom(roomId);
+
   clear();
   setStrokes([]);
 };

@@ -39,9 +39,26 @@ export default function CanvasRoom() {
   // SOCKET EVENTS
   // ===============================
   useEffect(() => {
-    socket.on("roomInfo", ({ userId }) => {
-      console.log("✓ Received roomInfo with userId:", userId);
+
+socket.on("roomUsers", (members) => {
+  console.log("Updated members:", members);
+
+  useCanvasStore.setState((state) => {
+    if (!state.currentRoom) return state;
+
+    return {
+      currentRoom: {
+        ...state.currentRoom,
+        members,
+      },
+    };
+  });
+});
+
+    socket.on("roomInfo", ({ userId,room }) => {
+      console.log("✓ Received roomInfo with userId:", userId,room);
       setUserId(userId);
+      setCurrentRoom(room);
     });
 
     socket.on("error", (errorMsg) => {
@@ -118,6 +135,7 @@ export default function CanvasRoom() {
       socket.off("strokeComplete");
       socket.off("clear");
       socket.off("roomHistory");
+      socket.off("roomUsers");
     };
   }, []);
 
@@ -145,13 +163,24 @@ export default function CanvasRoom() {
   // ===============================
   useEffect(() => {
     if (roomId) {
-      joinRoomUtil(roomId, setCurrentRoom, clear, setStrokes);
-    }
+      console.log("Attempting to join room: clear ========>", clear);
+      joinRoomUtil(roomId, currentRoom?._id, clear, setStrokes);}
   }, [roomId]);
+
+  console.log("Current Room:", currentRoom);
+  const username = localStorage.getItem("username") || "Unknown User";
 
   return (
     <div style={{ padding: "20px" }}>
-      <h2>Synced Canvas - Room: {currentRoom}</h2>
+      <h2>Synced Canvas - Room: {currentRoom?.name}</h2>
+      <h2>Total Members: {currentRoom?.members?.length || 0}</h2>
+      <h3>Active Users List</h3>
+        <ul>
+          {currentRoom?.members?.map((member) => (
+            <li key={member._id}>{member.username}</li>
+          ))}
+        </ul>
+      <p>Logged in as: {username}</p>
 
       <div style={{ marginBottom: "10px" }}>
         <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />

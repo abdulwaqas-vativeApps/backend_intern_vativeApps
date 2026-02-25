@@ -11,52 +11,54 @@ export default function canvasSocket(io) {
     socket.on("joinRoom", async ({ roomId }) => {
       try {
         if (!socket.user) {
-          console.error("joinRoom: socket.user is undefined - authentication failed");
           return socket.emit("error", "Not authenticated");
-        }
-
-        const room = await Room.findById(roomId);
-
-        if (!room) {
-          console.error(`joinRoom: Room ${roomId} not found`);
-          return socket.emit("error", "Room not found");
         }
 
         const userId = socket.user._id;
 
+        // Find room WITHOUT populate first
+        let room = await Room.findById(roomId);
+
+        if (!room) {
+          return socket.emit("error", "Room not found");
+        }
+
         // Check if already member
         const isMember = room.members.some(
-          (member) => member.toString() === userId.toString(),
+          (memberId) => memberId.toString() === userId.toString(),
         );
 
-        // Add member if not already in room
+        // Add only if not exists
         if (!isMember) {
           room.members.push(userId);
           await room.save();
         }
 
-        socket.join(roomId);
-        console.log(
-          `✓ User ${socket.user.username} (${socket.user._id}) joined room ${roomId}`,
+        // IMPORTANT: Populate AFTER update
+        room = await Room.findById(roomId).populate(
+          "members",
+          "username email",
         );
 
-        // Notify others
-        socket.to(roomId).emit("userJoined", {
-          userId: userId.toString(),
-          username: socket.user.username,
-        });
+        socket.join(roomId);
 
-        // Send room info (including user's database ID) and history
+        console.log(`✓ ${socket.user.username} joined room ${room.name}`);
+
+        // Notify others (only new join)
+        io.to(roomId).emit("roomUsers", room.members);
+
+        // Send room info WITH populated members
         socket.emit("roomInfo", {
           userId: userId.toString(),
+          room,
         });
 
+        // Send strokes history
         const strokes = await Stroke.find({
           roomId,
           isDeleted: false,
         });
 
-        console.log(`✓ Sending ${strokes.length} strokes to user ${socket.user.username}`);
         socket.emit("roomHistory", strokes);
       } catch (err) {
         console.error("joinRoom error:", err.message);
@@ -80,12 +82,11 @@ export default function canvasSocket(io) {
       );
       await room.save();
 
-      socket.leave(roomId);
+      // IMPORTANT: Populate AFTER update
+      room = await Room.findById(roomId).populate("members", "username email");
 
-      socket.to(roomId).emit("userLeft", {
-        userId: socket.user._id,
-        username: socket.user.username,
-      });
+      socket.leave(roomId);
+      io.to(roomId).emit("roomUsers", room.members);
     });
 
     // ---------------------------
@@ -97,9 +98,11 @@ export default function canvasSocket(io) {
           return socket.emit("error", "Not authenticated");
         }
         // Emit to others in room
-        socket
-          .to(roomId)
-          .emit("strokeStart", { userId: socket.user._id.toString(), strokeId, point });
+        socket.to(roomId).emit("strokeStart", {
+          userId: socket.user._id.toString(),
+          strokeId,
+          point,
+        });
       } catch (err) {
         console.error("strokeStart error:", err.message);
         socket.emit("error", "Failed to start stroke");
@@ -204,7 +207,7 @@ export default function canvasSocket(io) {
         }
 
         let stroke;
-        
+
         // If strokeId is provided, redo that specific stroke
         if (strokeId) {
           stroke = await Stroke.findOne({
@@ -250,13 +253,33 @@ export default function canvasSocket(io) {
     // ---------------------------
     // Disconnect
     // ---------------------------
-    socket.on("disconnect", () => {
-      console.log(`✗ User disconnected:`, socket.id);
-      if (socket.user) {
-        console.log(
-          `  User was: ${socket.user.username} (${socket.user._id})`,
-        );
-      }
-    });
+ socket.on("disconnect", async () => {
+    console.log("✗ User disconnected:", socket.id);
+    if (!socket.user) return;
+
+    const userId = socket.user._id;
+
+    // Find all rooms user was in
+    const rooms = await Room.find({ members: userId });
+
+    for (let room of rooms) {
+      // Remove user from members
+      room.members = room.members.filter(
+        (member) => member.toString() !== userId.toString()
+      );
+      await room.save();
+
+      // Populate members after update
+      const updatedRoom = await Room.findById(room._id).populate(
+        "members",
+        "username email"
+      );
+
+      // Notify other users in that room
+      io.to(room._id.toString()).emit("roomUsers", updatedRoom.members);
+    }
+
+    console.log("  User was:", socket.user.username, `(${userId})`);
+  });
   });
 }

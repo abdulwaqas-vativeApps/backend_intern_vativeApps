@@ -18,6 +18,7 @@ export default function LoginPage() {
       setMessage(data.message);
       // save token
       localStorage.setItem("token", data.data.token);
+      localStorage.setItem("username", data.data.user.username);
     } catch (err) {
       setMessage(err);
     }
