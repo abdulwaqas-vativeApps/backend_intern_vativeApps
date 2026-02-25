@@ -4,6 +4,7 @@ export const useCanvasStore = create((set) => ({
   strokes: [],
   currentStrokes: {},
   currentRoom: null,
+  roomMembers: [],
   user: null,
   undoStack: [], // Track undone strokes for redo
 
@@ -85,7 +86,8 @@ export const useCanvasStore = create((set) => ({
       undoStack: [],
     }),
 
-  setCurrentRoom: (roomId) => set({ currentRoom: roomId }),
+  setCurrentRoom: (room) => set({ currentRoom: room }),
+  setRoomMembers: (members) => set({ roomMembers: members }),
   setStrokes: (newStrokes) => set({ strokes: newStrokes, undoStack: [] }),
   setUser: (user) => set({ user }),
 }));

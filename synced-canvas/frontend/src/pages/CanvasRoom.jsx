@@ -30,6 +30,8 @@ export default function CanvasRoom() {
   const redo = useCanvasStore((state) => state.redo);
   const clear = useCanvasStore((state) => state.clear);
   const currentRoom = useCanvasStore((state) => state.currentRoom);
+  const roomMembers = useCanvasStore((state) => state.roomMembers);
+  const setRoomMembers = useCanvasStore((state) => state.setRoomMembers);
   const setCurrentRoom = useCanvasStore((state) => state.setCurrentRoom);
   const setStrokes = useCanvasStore((state) => state.setStrokes);
   const setUser = useCanvasStore((state) => state.setUser);
@@ -57,19 +59,10 @@ export default function CanvasRoom() {
     Navigate("/login");
   }
 
-    socket.on("roomUsers", (members) => {
+    socket.on("roomMembers", (members) => {
       console.log("Updated members:", members);
 
-      useCanvasStore.setState((state) => {
-        if (!state.currentRoom) return state;
-
-        return {
-          currentRoom: {
-            ...state.currentRoom,
-            members,
-          },
-        };
-      });
+      setRoomMembers(members);
     });
 
     socket.on("roomInfo", ({ room }) => {
@@ -135,7 +128,6 @@ export default function CanvasRoom() {
     });
     socket.on("clear", () => clear());
     socket.on("roomHistory", (strokes) => {
-      console.log("✓ Received roomHistory with", strokes.length, "strokes");
       setStrokes(strokes);
     });
 
@@ -149,7 +141,7 @@ export default function CanvasRoom() {
       socket.off("strokeComplete");
       socket.off("clear");
       socket.off("roomHistory");
-      socket.off("roomUsers");
+      socket.off("roomMembers");
     };
   }, []);
 
@@ -181,7 +173,7 @@ export default function CanvasRoom() {
   useEffect(() => {
     if (roomId) {
       console.log("Attempting to join room: clear ========>", clear);
-      joinRoomUtil(roomId, currentRoom?._id, clear, setStrokes);
+      joinRoomUtil(roomId, currentRoom?.id, clear);
     }
   }, [roomId]);
 

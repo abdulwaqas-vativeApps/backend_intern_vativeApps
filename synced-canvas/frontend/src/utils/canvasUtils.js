@@ -60,7 +60,7 @@ export const redoLastStroke = (redo, currentRoom) => {
 // ===============================
 // ROOM JOINING
 // ===============================
-export const joinRoom = (roomId, currentRoomId, clear, setStrokes) => {
+export const joinRoom = (roomId, currentRoomId, clear) => {
   if (!roomId.trim()) return;
   
   if (currentRoomId && currentRoomId !== roomId) {
@@ -71,7 +71,7 @@ export const joinRoom = (roomId, currentRoomId, clear, setStrokes) => {
   socket.emit("joinRoom", { roomId });
 
   clear();
-  setStrokes([]);
+  
 };
 
 // ===============================

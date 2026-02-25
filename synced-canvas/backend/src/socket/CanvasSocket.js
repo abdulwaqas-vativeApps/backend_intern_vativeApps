@@ -42,7 +42,7 @@ export default function canvasSocket(io) {
         socket.join(roomId);
 
         // Notify others (only new join)
-        io.to(roomId).emit("roomUsers", room.members);
+        io.to(roomId).emit("roomMembers", room.members);
 
         // Send room info WITH populated members
         socket.emit("roomInfo", {
@@ -84,7 +84,7 @@ export default function canvasSocket(io) {
       room = await Room.findById(roomId).populate("members", "username email");
 
       socket.leave(roomId);
-      io.to(roomId).emit("roomUsers", room.members);
+      io.to(roomId).emit("roomMembers", room.members);
     });
 
     // ---------------------------
@@ -261,7 +261,7 @@ export default function canvasSocket(io) {
       const rooms = await Room.find({ members: userId });
 
       for (let room of rooms) {
-        // Remove user from members
+        // Remove user from members (user at a time aik hi room m hoga, but phir bhi ye safety k lien)
         room.members = room.members.filter(
           (member) => member.toString() !== userId.toString(),
         );
@@ -274,7 +274,7 @@ export default function canvasSocket(io) {
         );
 
         // Notify other users in that room
-        io.to(room._id.toString()).emit("roomUsers", updatedRoom.members);
+        io.to(room._id.toString()).emit("roomMembers", updatedRoom.members);
       }
 
       console.log("  User was:", socket.user.username, `(${userId})`);
