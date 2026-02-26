@@ -69,7 +69,7 @@ export default function canvasSocket(io) {
     // ---------------------------
     socket.on("leaveRoom", async (roomId) => {
       const userId = socket.user._id;
-      const room = await Room.findById(roomId);
+      let room = await Room.findById(roomId);
 
       if (!room) {
         return socket.emit("error", "Room not found");
@@ -117,19 +117,19 @@ export default function canvasSocket(io) {
           if (!socket.user) {
             return socket.emit("error", "Not authenticated");
           }
-          console.log(
-            "🎨 strokePoint received ",
-            "userId:",
-            socket.user._id.toString(),
-            "strokeId:",
-            strokeId,
-            "color:",
-            color,
-            "brushSize:",
-            brushSize,
-            "point:",
-            point,
-          );
+          // console.log(
+          //   "🎨 strokePoint received ",
+          //   "userId:",
+          //   socket.user._id.toString(),
+          //   "strokeId:",
+          //   strokeId,
+          //   "color:",
+          //   color,
+          //   "brushSize:",
+          //   brushSize,
+          //   "point:",
+          //   point,
+          // );
           socket.to(roomId).emit("strokePoint", {
             userId: socket.user._id.toString(),
             strokeId,
@@ -163,7 +163,7 @@ export default function canvasSocket(io) {
             points
           });
 
-          console.log("🎨 New stroke created:", newStroke);
+          // console.log("🎨 New stroke created:", newStroke);
 
           // Emit strokeComplete with DB _id + strokeId to ALL users in room (including sender)
           io.to(roomId).emit("strokeComplete", {
@@ -202,7 +202,7 @@ export default function canvasSocket(io) {
         stroke.isDeleted = true;
         await stroke.save();
 
-        // console.log(`↶ Undo for strokeId:`, strokeId);
+        console.log(`↶ Undo for strokeId:`, strokeId);
         io.to(roomId).emit("undo", { strokeId });
       } catch (err) {
         console.error("undo error:", err.message);
@@ -229,7 +229,7 @@ export default function canvasSocket(io) {
             isDeleted: true,
           });
         } else {
-          // Otherwise, redo the last deleted stroke
+          // Otherwise, redo the last deleted stroke (currently ignore this)
           stroke = await Stroke.findOne({
             roomId,
             userId: socket.user._id,
@@ -242,10 +242,12 @@ export default function canvasSocket(io) {
         stroke.isDeleted = false;
         await stroke.save();
 
-        io.to(roomId).emit("strokeComplete", {
+        io.to(roomId).emit("redoStroke", {
           ...stroke.toObject(),
           strokeId: stroke.strokeId,
         });
+
+        console.log(`↻ Redo for strokeId:`, stroke.strokeId);
       } catch (err) {
         console.error("redo error:", err.message);
         socket.emit("error", "Unable to redo stroke");

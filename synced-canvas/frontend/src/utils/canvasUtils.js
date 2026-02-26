@@ -6,14 +6,14 @@ import { socket } from "../socket/socket";
 // ===============================
 export const findLastUserStrokeId = (strokes, userId) => {
   const reversed = [...strokes].reverse();
-  const lastStroke = reversed.find((stroke) => stroke.user.id === userId);
+  const lastStroke = reversed.find((stroke) => stroke.userId === userId);
   return lastStroke ? lastStroke.strokeId : null;
 };
 
 // ===============================
 // undo the last stroke of the current user
 // ===============================
-export const undoLastStroke = (strokes, undo, currentRoom) => {
+export const undoLastStroke = (strokes, undo, currentRoomId) => {
   const store = useCanvasStore.getState();
   const userId = store.user.id;
   const lastStrokeId = findLastUserStrokeId(strokes, userId);
@@ -22,7 +22,7 @@ export const undoLastStroke = (strokes, undo, currentRoom) => {
   undo(lastStrokeId);
 
   socket.emit("undo", {
-    roomId: currentRoom,
+    roomId: currentRoomId,
     strokeId: lastStrokeId,
   });
 };
@@ -30,28 +30,31 @@ export const undoLastStroke = (strokes, undo, currentRoom) => {
 // ===============================
 // redo the last undo stroke of the current user
 // ===============================
-export const redoLastStroke = (redo, currentRoom) => {
+export const redoLastStroke = (redo, currentRoomId) => {
   const store = useCanvasStore.getState();
   const undoStack = store.undoStack;
+  const userId = store.user.id;
 
+  // view this in future after refreash user can not redo
   if (undoStack.length === 0) {
     console.warn("⚠ Nothing to redo");
     return;
   }
 
-  // Get the last undone stroke (most recent)
-  const lastUndoneStroke = undoStack[undoStack.length - 1];
+  const reversed = [...undoStack].reverse();
 
-  if (!lastUndoneStroke || !lastUndoneStroke.strokeId) {
-    console.error("Invalid stroke in undo stack:", lastUndoneStroke);
+  // find last undone stroke of this user  const reversed = [...undoStack].reverse();
+  const lastUndoneStroke = reversed.find((stroke) => stroke.userId === userId);
+  if (!lastUndoneStroke) {
+    console.warn("⚠ No undone stroke found for this user");
     return;
   }
 
-  console.log("↻ Redoing stroke:", lastUndoneStroke.strokeId);
   redo(lastUndoneStroke);
+  // console.log("↻ Redoing stroke:", lastUndoneStroke.strokeId);
 
   socket.emit("redo", {
-    roomId: currentRoom,
+    roomId: currentRoomId,
     strokeId: lastUndoneStroke.strokeId,
   });
 };
@@ -86,7 +89,7 @@ export const startDrawing = (
   const userId = store.user.id;
 
   if (!userId) {
-    console.log("Cannot start stroke - userId not found");
+    // console.log("Cannot start stroke - userId not found");
     return;
   }
 
@@ -116,15 +119,15 @@ export const startDrawing = (
     point: { x, y },
   });
 
-  console.log(
-    "🎨 strokeStart emitted",
-    "userId:",
-    userId,
-    "strokeId:",
-    strokeId,
-    "point:",
-    { x, y },
-  );
+  // console.log(
+  //   "🎨 strokeStart emitted",
+  //   "userId:",
+  //   userId,
+  //   "strokeId:",
+  //   strokeId,
+  //   "point:",
+  //   { x, y },
+  // );
 };
 
 // ===============================
@@ -147,11 +150,11 @@ export const draw = (
   const userId = store.user.id;
   const strokeId = store.currentStrokes[userId]?.strokeId;
 
-  console.log("store.currentStrokes[userId]", store.currentStrokes[userId]);
-  console.log(
-    "store.currentStrokes[userId]?.strokeId",
-    store.currentStrokes[userId]?.strokeId,
-  );
+  // console.log("store.currentStrokes[userId]", store.currentStrokes[userId]);
+  // console.log(
+  //   "store.currentStrokes[userId]?.strokeId",
+  //   store.currentStrokes[userId]?.strokeId,
+  // );
 
   if (!userId) {
     console.log("Cannot add point - userId not found");
@@ -187,15 +190,15 @@ export const draw = (
       point,
     });
 
-    console.log(
-      "🎨 strokePoint emitted",
-      "userId:",
-      userId,
-      "strokeId:",
-      strokeId,
-      "point:",
-      point,
-    );
+    // console.log(
+    //   "🎨 strokePoint emitted",
+    //   "userId:",
+    //   userId,
+    //   "strokeId:",
+    //   strokeId,
+    //   "point:",
+    //   point,
+    // );
 
     animationFrameRef.current = null;
   });
@@ -231,18 +234,18 @@ export const stopDrawing = (
       points,
     });
 
-    console.log(
-      "🎨 strokeEnd emitted",
+    // console.log(
+    //   "🎨 strokeEnd emitted",
      
-      "strokeId:",
-      strokeId,
-      "color:",
-      color,
-      "brushSize:",
-      brushSize,
-      "points:",
-      points,
-      );
+    //   "strokeId:",
+    //   strokeId,
+    //   "color:",
+    //   color,
+    //   "brushSize:",
+    //   brushSize,
+    //   "points:",
+    //   points,
+    //   );
   }
 };
 

@@ -5,6 +5,7 @@ import LoginPage from "./pages/Login";
 import RoomsPage from "./pages/AllRooms";
 import CanvasBoard from "./components/CanvasBoard";
 import CanvasRoom from "./pages/CanvasRoom";
+import { Toaster } from "react-hot-toast";
 
 function App() {
   // simple auth check based on token
@@ -13,6 +14,7 @@ function App() {
 
   return (
     <Router>
+      <Toaster position="top-right" />
       <Routes>
         <Route path="/" element={<Navigate to={token ? "/rooms" : "/login"} />} />
         <Route path="/register" element={<RegisterPage />} />
