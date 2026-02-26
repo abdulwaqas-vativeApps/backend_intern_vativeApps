@@ -9,10 +9,12 @@ export const createRoom = async (req, res, next) => {
     if (existing) {
       throw new ApiError(400, "Room name already exists");
     }
-    const room = await Room.create({
+    let room = await Room.create({
       name,
       createdBy: req.user.id,
     });
+
+    room = await room.populate("createdBy", "username email");
 
     return sendResponse(res, 201, "Room created", room);
   } catch (err) {
@@ -22,7 +24,8 @@ export const createRoom = async (req, res, next) => {
 
 export const getAllRooms = async (req, res, next) => {
   try {
-    const rooms = await Room.find().populate("members", "username email");
+    const rooms = await Room.find()
+      .populate("createdBy", "username email");
 
     if (!rooms) {
       throw new ApiError(404, "No rooms found");

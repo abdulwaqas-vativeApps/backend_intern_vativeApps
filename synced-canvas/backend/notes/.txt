@@ -1,441 +1,70 @@
-mera ab current code is trhn ka ho gia h 
+m ne almost sara kam kr lia h ab bus ye below kam rehta h
+4. The Presence Flow (Awareness)
+● Heartbeat: The app constantly shares the $(x, y)$ coordinates of every active user's
+cursor.
+● Visual Cues: Remote cursors are rendered as "ghost icons" with name tags, providing
+the feeling of a shared physical space
 
-++++++++++++++++++++ frontend ++++++++++++++++++++++
-import { useRef, useEffect, useState, use } from "react";
-import { useCanvasStore } from "../store/canvasStore";
-import { socket } from "../socket/socket";
-import { undoLastStroke, redoLastStroke, joinRoom, startDrawing, draw, stopDrawing, redrawCanvas } from "../utils/canvasUtils";
+ye m kis trhn hota h aur ye m kese kr sakta hun mera backend asa h
 
-export default function CanvasBoard() {
-  const canvasRef = useRef(null);
-  const animationFrameRef = useRef(null);
-  const lastPointRef = useRef(null);
+------------------- backend ----------------
 
-  const strokes = useCanvasStore((state) => state.strokes);
-  const startStroke = useCanvasStore((state) => state.startStroke);
-  const addPoint = useCanvasStore((state) => state.addPoint);
-  const endStroke = useCanvasStore((state) => state.endStroke);
-  const undo = useCanvasStore((state) => state.undo);
-  const redo = useCanvasStore((state) => state.redo);
-  const clear = useCanvasStore((state) => state.clear);
-
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [color, setColor] = useState("#ffffff");
-  const [brushSize, setBrushSize] = useState(5);
-  const [roomId, setRoomId] = useState("");
-  const [currentRoom, setCurrentRoom] = useState(null);
-
-  // console.log("CanvasBoard Rendered with strokes:", strokes);
-
-  // ===============================
-  // SOCKET SETUP
-  // ===============================
-  useEffect(() => {
-    socket.on("strokeStart", ({ userId, strokeId, point }) => {
-      startStroke({ userId, strokeId, point });
-
-      const ctx = canvasRef.current.getContext("2d");
-      ctx.beginPath();
-      ctx.moveTo(point.x, point.y);
-    });
-
-    socket.on("strokePoint", ({ userId, point, color, brushSize }) => {
-      const store = useCanvasStore.getState();
-
-      // check stroke exists
-      if (!store.currentStrokes[userId]) {
-        console.warn("Received strokePoint before strokeStart");
-        return;
-      }
-
-      const ctx = canvasRef.current.getContext("2d");
-
-      ctx.strokeStyle = color;
-      ctx.lineWidth = brushSize;
-
-      ctx.lineTo(point.x, point.y);
-      ctx.stroke();
-
-      addPoint({ userId, point });
-    });
-
-    socket.on("strokeEnd", ({ userId, color, brushSize }) => {
-      endStroke({ userId, color, brushSize });
-    });
-
-    socket.on("undo", ({ strokeId }) => {
-      undo(strokeId);
-    });
-
-    socket.on("redo", ({ userId }) => {
-      console.log("Redoing stroke by ON:", userId);
-      redo(userId);
-    });
-
-    socket.on("clear", () => {
-      clear();
-    });
-
-    return () => {
-      socket.off("strokeStart");
-      socket.off("strokePoint");
-      socket.off("strokeEnd");
-      socket.off("undo");
-      socket.off("redo");
-      socket.off("clear");
-    };
-  }, []);
-
-  // ===============================
-  // CANVAS INIT
-  // ===============================
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    redrawCanvas(canvasRef);
-  }, [strokes]);
-
-  const handleJoinRoom = () => {
-    joinRoom(roomId, currentRoom, clear);
-    setCurrentRoom(roomId);
-  };
-
-  return (
-    <div style={{ padding: "20px" }}>
-      <h2>Zustand Synced Canvas</h2>
-
-      <div style={{ marginBottom: "10px" }}>
-        <div style={{ marginBottom: "10px" }}>
-          <input
-            type="text"
-            placeholder="Enter Room ID"
-            value={roomId}
-            onChange={(e) => setRoomId(e.target.value)}
-          />
-          <button onClick={handleJoinRoom}>Join Room</button>
-        </div>
-
-        {currentRoom && <p>Current Room: {currentRoom}</p>}
-        <input
-          type="color"
-          value={color}
-          onChange={(e) => setColor(e.target.value)}
-        />
-        <input
-          type="range"
-          min="1"
-          max="20"
-          value={brushSize}
-          onChange={(e) => setBrushSize(e.target.value)}
-        />
-        <button onClick={() => undoLastStroke(strokes, undo, currentRoom)}>Undo</button>
-        <button onClick={() => redoLastStroke(redo, currentRoom)}>Redo</button>
-
-        <button
-          onClick={() => {
-            clear();
-            socket.emit("clear", { roomId: currentRoom });
-          }}
-        >
-          Clear
-        </button>
-      </div>
-
-      <canvas
-        ref={canvasRef}
-        width={900}
-        height={500}
-        style={{ border: "2px solid black", background: "black" }}
-        onMouseDown={(e) => startDrawing(e, setIsDrawing, startStroke, canvasRef, currentRoom)}
-        onMouseMove={(e) => draw(e, isDrawing, animationFrameRef, lastPointRef, color, brushSize, addPoint, canvasRef, currentRoom)}
-        onMouseUp={() => stopDrawing(setIsDrawing, endStroke, color, brushSize, currentRoom)}
-        onMouseLeave={() => stopDrawing(setIsDrawing, endStroke, color, brushSize, currentRoom)}
-      />
-    </div>
-  );
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-import { create } from "zustand";
-
-export const useCanvasStore = create((set) => ({
-  strokes: [],
-  currentStrokes: {},
-  redoStack: [],
-
-  // ==================================
-  // start a new stroke for a user with the initial point
-  // ==================================
-  startStroke: ({ userId, strokeId, point }) =>
-    set((state) => ({
-      currentStrokes: {
-        ...state.currentStrokes,
-        [userId]: {
-          strokeId,
-          points: [point],
-        },
-      },
-    })),
-
-  // ==================================
-  // add a point to the current stroke of a user
-  // ==================================
-  addPoint: ({ userId, point }) =>
-    set((state) => {
-      const existing = state.currentStrokes[userId];
-
-      // SAFETY CHECK
-      if (!existing) {
-        return {}; // ignore invalid packet
-      }
-
-      return {
-        currentStrokes: {
-          ...state.currentStrokes,
-          [userId]: {
-            ...existing,
-            points: [...existing.points, point],
-          },
-        },
-      };
-    }),
-
-  // ==================================
-  // end the stroke of a user and move it from currentStrokes to strokes array
-  // ===================================
-  endStroke: ({ userId, color, brushSize }) =>
-    set((state) => {
-      const current = state.currentStrokes[userId];
-
-      if (!current) return {};
-
-      const finishedStroke = {
-        strokeId: current.strokeId,
-        userId,
-        color,
-        brushSize,
-        points: current.points,
-      };
-
-      const { [userId]: _, ...rest } = state.currentStrokes;
-
-      return {
-        strokes: [...state.strokes, finishedStroke],
-        currentStrokes: rest,
-      };
-    }),
-
-  // ==================================
-  // undo the last stroke of a user
-  //===================================
-  undo: (strokeId) =>
-    set((state) => {
-      const strokeToRemove = state.strokes.find(
-        (stroke) => stroke.strokeId === strokeId,
-      );
-
-      if (!strokeToRemove) return {};
-
-      return {
-        strokes: state.strokes.filter((stroke) => stroke.strokeId !== strokeId),
-        redoStack: [...state.redoStack, strokeToRemove],
-      };
-    }),
-
-
-  // ==================================
-  // redo the last undo stroke of a user
-  // ==================================
-  redo: (userId) =>
-    set((state) => {
-      // find last undone stroke of this user
-      const reversed = [...state.redoStack].reverse();
-      const strokeToRestore = reversed.find(
-        (stroke) => stroke.userId === userId,
-      );
-
-      if (!strokeToRestore) return {};
-
-      return {
-        strokes: [...state.strokes, strokeToRestore],
-        redoStack: state.redoStack.filter(
-          (stroke) => stroke.strokeId !== strokeToRestore.strokeId,
-        ),
-      };
-    }),
-
-  // ==================================
-  // clear all strokes from the canvas
-  // ==================================
-  clear: () =>
-    set({
-      strokes: [],
-      currentStrokes: {},
-    }),
-}));
-
-
-
-
-
-
-
-
-import { io } from "socket.io-client";
-
-
-export const socket = io("http://localhost:5000", {
-  auth: {
-    token: localStorage.getItem("token"),
-  },
-});
-
-
-
-
-
-
-
-
-
-
-++++++++++++++++++++ backend ++++++++++++++++++++++
-import express from "express";
-import http from "http";
-import { Server } from "socket.io";
-import dotenv from "dotenv";
-import { connectDB } from "./src/config/db.js";     
-import canvasSocket from "./src/socket/CanvasSocket.js";
-import userRoutes from "./src/routes/UserRoutes.js";
-import { globalErrorHandler } from "./src/middleware/GlobalError.js";
-import roomRoutes from "./src/routes/RoomRoutes.js";
-import { ApiError } from "./src/utils/ApiError.js";
-import User from "./src/models/User.js";
-import jwt from "jsonwebtoken";
-
-dotenv.config();
-await connectDB();
-
-const app = express();
-const server = http.createServer(app);
-
-
-// ---------------------------
-// Socket.io setup with JWT authentication
-// ---------------------------
-const io = new Server(server, {
-  cors: { origin: "*" },
-});
-
-io.use(async (socket, next) => {
-  try {
-    const token = socket.handshake.auth.token;
-
-    if (!token) throw new ApiError(401, "No token provided");
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    const user = await User.findById(decoded.id).select("-password");
-    if (!user) throw new ApiError(401, "User not found");
-
-    socket.user = user;
-
-    next();
-  } catch (err) {
-    next(err || new ApiError(401, "Not authorized"));
-  }
-});
-
-canvasSocket(io);
-
-app.use(express.json());
-
-// ---------------------------
-// Routes
-// ---------------------------
-app.use("/api/auth", userRoutes);
-app.use("/api/rooms", roomRoutes);
-
-// ---------------------------
-// Route not found Handler
-// ---------------------------
-app.use((req, res, next) => {
-  next(new ApiError(404, "Route not found"));
-});
-
-app.use(globalErrorHandler);
-
-server.listen(process.env.PORT || 5000, () =>
-  console.log("Server running on port", process.env.PORT || 5000),
-);
-
-
-
-
+canvasSocket.js
 
 import Room from "../models/Room.js";
 import Stroke from "../models/Stroke.js";
 
 export default function canvasSocket(io) {
   io.on("connection", (socket) => {
-    console.log("User connected:", socket.id);
+    console.log("User connected:", socket.id, "name:", socket.user?.username);
 
     // ---------------------------
     // Join Room + Send History
     // ---------------------------
     socket.on("joinRoom", async ({ roomId }) => {
       try {
-        const room = await Room.findById(roomId);
+        if (!socket.user) {
+          return socket.emit("error", "Not authenticated");
+        }
+
+        const userId = socket.user._id;
+
+        // Find room WITHOUT populate first
+        let room = await Room.findById(roomId);
 
         if (!room) {
           return socket.emit("error", "Room not found");
         }
 
-        const userId = socket.user._id;
-
         // Check if already member
         const isMember = room.members.some(
-          (member) => member.toString() === userId.toString(),
+          (memberId) => memberId.toString() === userId.toString(),
         );
 
-        // Add member if not already in room
+        // Add only if not exists
         if (!isMember) {
           room.members.push(userId);
           await room.save();
         }
 
+        // IMPORTANT: Populate AFTER update
+        room = await Room.findById(roomId)
+          .populate("members", "username email")
+          .populate("createdBy", "username email");
+
         socket.join(roomId);
 
-        // Notify others
-        socket.to(roomId).emit("userJoined", {
-          userId,
-          username: socket.user.username,
+        // Notify others (only new join)
+        io.to(roomId).emit("roomMembers", room.members);
+
+        // Send room info WITH populated members
+        socket.emit("roomInfo", {
+          id: room._id,
+          name: room.name,
+          createdBy: room.createdBy,
         });
 
-        // Send history
+        // Send strokes history
         const strokes = await Stroke.find({
           roomId,
           isDeleted: false,
@@ -443,7 +72,8 @@ export default function canvasSocket(io) {
 
         socket.emit("roomHistory", strokes);
       } catch (err) {
-        socket.emit("error", "Something went wrong");
+        console.error("joinRoom error:", err.message);
+        socket.emit("error", "Something went wrong joining room");
       }
     });
 
@@ -452,7 +82,7 @@ export default function canvasSocket(io) {
     // ---------------------------
     socket.on("leaveRoom", async (roomId) => {
       const userId = socket.user._id;
-      const room = await Room.findById(roomId);
+      let room = await Room.findById(roomId);
 
       if (!room) {
         return socket.emit("error", "Room not found");
@@ -463,22 +93,31 @@ export default function canvasSocket(io) {
       );
       await room.save();
 
-      socket.leave(roomId);
+      // IMPORTANT: Populate AFTER update
+      room = await Room.findById(roomId).populate("members", "username email");
 
-      socket.to(roomId).emit("userLeft", {
-        userId: socket.user._id,
-        username: socket.user.username,
-      });
+      socket.leave(roomId);
+      io.to(roomId).emit("roomMembers", room.members);
     });
 
     // ---------------------------
     // Stroke Start (Emit to others in room)
     // ---------------------------
-    socket.on("strokeStart", ({ roomId, point, strokeId }) => {
-      // Emit to others in room
-      socket
-        .to(roomId)
-        .emit("strokeStart", { userId: socket.user._id, strokeId, point });
+    socket.on("strokeStart", ({ roomId, strokeId, point }) => {
+      try {
+        if (!socket.user) {
+          return socket.emit("error", "Not authenticated");
+        }
+        // Emit to others in room
+        socket.to(roomId).emit("strokeStart", {
+          userId: socket.user._id.toString(),
+          strokeId,
+          point,
+        });
+      } catch (err) {
+        // console.error("strokeStart error:", err.message);
+        socket.emit("error", "Failed to start stroke");
+      }
     });
 
     //----------------------------
@@ -486,14 +125,35 @@ export default function canvasSocket(io) {
     //----------------------------
     socket.on(
       "strokePoint",
-      ({ roomId, point, strokeId, color, brushSize }) => {
-        socket.to(roomId).emit("strokePoint", {
-          userId: socket.user._id,
-          strokeId,
-          point,
-          color,
-          brushSize,
-        });
+      ({ roomId,strokeId, color, brushSize, point }) => {
+        try {
+          if (!socket.user) {
+            return socket.emit("error", "Not authenticated");
+          }
+          // console.log(
+          //   "🎨 strokePoint received ",
+          //   "userId:",
+          //   socket.user._id.toString(),
+          //   "strokeId:",
+          //   strokeId,
+          //   "color:",
+          //   color,
+          //   "brushSize:",
+          //   brushSize,
+          //   "point:",
+          //   point,
+          // );
+          socket.to(roomId).emit("strokePoint", {
+            userId: socket.user._id.toString(),
+            strokeId,
+            color,
+            brushSize,
+            point,
+          });
+        } catch (err) {
+          console.error("strokePoint error:", err.message);
+          socket.emit("error", "Failed to record stroke point");
+        }
       },
     );
 
@@ -502,41 +162,63 @@ export default function canvasSocket(io) {
     //----------------------------
     socket.on(
       "strokeEnd",
-      async ({ roomId, points, strokeId, color, brushSize }) => {
-        const newStroke = await Stroke.create({
-          strokeId, // frontend strokeId
-          roomId,
-          userId: socket.user._id,
-          points,
-          color,
-          width: brushSize,
-        });
+      async ({ roomId, strokeId, color, brushSize,points }) => {
+        try {
+          if (!socket.user) {
+            return socket.emit("error", "Not authenticated");
+          }
+          const newStroke = await Stroke.create({
+            strokeId, // frontend strokeId
+            roomId,
+            userId: socket.user._id,
+            color,
+            width: brushSize,
+            points
+          });
 
-        // Emit strokeComplete with DB _id + strokeId
-        io.to(roomId).emit("strokeComplete", {
-          ...newStroke.toObject(),
-          strokeId: newStroke.strokeId, // keep frontend strokeId
-        });
+          // console.log("🎨 New stroke created:", newStroke);
+
+          // Emit strokeComplete with DB _id + strokeId to ALL users in room (including sender)
+          io.to(roomId).emit("strokeComplete", {
+            ...newStroke.toObject(),
+            strokeId: newStroke.strokeId, // frontend strokeId for matching
+          });
+        } catch (err) {
+          console.error("strokeEnd error:", err.message);
+          socket.emit("error", "Failed to save stroke");
+        }
       },
     );
-
+ 
     // ---------------------------
     // Undo (Soft Delete)
     // ---------------------------
     socket.on("undo", async ({ roomId, strokeId }) => {
       try {
+        if (!socket.user) {
+          return socket.emit("error", "Not authenticated");
+        }
+
+        if (!strokeId) {
+          return socket.emit("error", "No strokeId provided");
+        }
+
         const stroke = await Stroke.findOne({
           strokeId,
           userId: socket.user._id,
         });
-        if (!stroke)
+
+        if (!stroke) {
           return socket.emit("error", "Stroke not found or not yours");
+        }
 
         stroke.isDeleted = true;
         await stroke.save();
 
+        console.log(`↶ Undo for strokeId:`, strokeId);
         io.to(roomId).emit("undo", { strokeId });
       } catch (err) {
+        console.error("undo error:", err.message);
         socket.emit("error", "Unable to undo stroke");
       }
     });
@@ -544,24 +226,43 @@ export default function canvasSocket(io) {
     // ---------------------------
     // Redo (Restore Last Deleted Stroke of User)
     // ---------------------------
-    socket.on("redo", async ({ roomId }) => {
+    socket.on("redo", async ({ roomId, strokeId }) => {
       try {
-        const lastDeleted = await Stroke.findOne({
-          roomId,
-          userId: socket.user._id,
-          isDeleted: true,
-        }).sort({ updatedAt: -1 });
+        if (!socket.user) {
+          return socket.emit("error", "Not authenticated");
+        }
 
-        if (!lastDeleted) return socket.emit("error", "No stroke to redo");
+        let stroke;
 
-        lastDeleted.isDeleted = false;
-        await lastDeleted.save();
+        // If strokeId is provided, redo that specific stroke
+        if (strokeId) {
+          stroke = await Stroke.findOne({
+            strokeId,
+            userId: socket.user._id,
+            isDeleted: true,
+          });
+        } else {
+          // Otherwise, redo the last deleted stroke (currently ignore this)
+          stroke = await Stroke.findOne({
+            roomId,
+            userId: socket.user._id,
+            isDeleted: true,
+          }).sort({ updatedAt: -1 });
+        }
 
-        io.to(roomId).emit("strokeComplete", {
-          ...lastDeleted.toObject(),
-          strokeId: lastDeleted.strokeId,
+        if (!stroke) return socket.emit("error", "No stroke to redo");
+
+        stroke.isDeleted = false;
+        await stroke.save();
+
+        io.to(roomId).emit("redoStroke", {
+          ...stroke.toObject(),
+          strokeId: stroke.strokeId,
         });
+
+        console.log(`↻ Redo for strokeId:`, stroke.strokeId);
       } catch (err) {
+        console.error("redo error:", err.message);
         socket.emit("error", "Unable to redo stroke");
       }
     });
@@ -580,18 +281,624 @@ export default function canvasSocket(io) {
     // ---------------------------
     // Disconnect
     // ---------------------------
-    socket.on("disconnect", () => {
-      console.log("User disconnected:", socket.id);
+    socket.on("disconnect", async () => {
+      console.log("✗ User disconnected:", socket.id);
+      if (!socket.user) return;
+
+      const userId = socket.user._id;
+
+      // Find all rooms user was in
+      const rooms = await Room.find({ members: userId });
+
+      for (let room of rooms) {
+        // Remove user from members (user at a time aik hi room m hoga, but phir bhi ye safety k lien)
+        room.members = room.members.filter(
+          (member) => member.toString() !== userId.toString(),
+        );
+        await room.save();
+
+        // Populate members after update
+        const updatedRoom = await Room.findById(room._id).populate(
+          "members",
+          "username email",
+        );
+
+        // Notify other users in that room
+        io.to(room._id.toString()).emit("roomMembers", updatedRoom.members);
+      }
+
+      console.log("  User was:", socket.user.username, `(${userId})`);
     });
   });
 }
 
 
 
+---------------------- frontend ---------------------------
+
+canvasUtils.js
+
+import { useCanvasStore } from "../store/canvasStore";
+import { socket } from "../socket/socket";
+
+// ===============================
+// find the last stroke ID of a user (used for undo functionality)
+// ===============================
+export const findLastUserStrokeId = (strokes, userId) => {
+  const reversed = [...strokes].reverse();
+  const lastStroke = reversed.find((stroke) => stroke.userId === userId);
+  return lastStroke ? lastStroke.strokeId : null;
+};
+
+// ===============================
+// undo the last stroke of the current user
+// ===============================
+export const undoLastStroke = (strokes, undo, currentRoomId) => {
+  const store = useCanvasStore.getState();
+  const userId = store.user.id;
+  const lastStrokeId = findLastUserStrokeId(strokes, userId);
+  if (!lastStrokeId) return;
+
+  undo(lastStrokeId);
+
+  socket.emit("undo", {
+    roomId: currentRoomId,
+    strokeId: lastStrokeId,
+  });
+};
+
+// ===============================
+// redo the last undo stroke of the current user
+// ===============================
+export const redoLastStroke = (redo, currentRoomId) => {
+  const store = useCanvasStore.getState();
+  const undoStack = store.undoStack;
+  const userId = store.user.id;
+
+  // view this in future after refreash user can not redo
+  if (undoStack.length === 0) {
+    console.warn("⚠ Nothing to redo");
+    return;
+  }
+
+  const reversed = [...undoStack].reverse();
+
+  // find last undone stroke of this user  const reversed = [...undoStack].reverse();
+  const lastUndoneStroke = reversed.find((stroke) => stroke.userId === userId);
+  if (!lastUndoneStroke) {
+    console.warn("⚠ No undone stroke found for this user");
+    return;
+  }
+
+  redo(lastUndoneStroke);
+  // console.log("↻ Redoing stroke:", lastUndoneStroke.strokeId);
+
+  socket.emit("redo", {
+    roomId: currentRoomId,
+    strokeId: lastUndoneStroke.strokeId,
+  });
+};
+
+// ===============================
+// ROOM JOINING
+// ===============================
+export const joinRoom = (roomId, currentRoomId, clear) => {
+  if (!roomId.trim()) return;
+
+  if (currentRoomId && currentRoomId !== roomId) {
+    socket.emit("leaveRoom", currentRoomId);
+  }
+
+  console.log("📍 Joining room:", roomId);
+  socket.emit("joinRoom", { roomId });
+
+  clear();
+};
+
+// ===============================
+// START DRAW
+// ===============================
+export const startDrawing = (
+  e,
+  setIsDrawing,
+  startStroke,
+  canvasRef,
+  currentRoomId,
+) => {
+  const store = useCanvasStore.getState();
+  const userId = store.user.id;
+
+  if (!userId) {
+    // console.log("Cannot start stroke - userId not found");
+    return;
+  }
+
+  const x = e.nativeEvent.offsetX;
+  const y = e.nativeEvent.offsetY;
+  const strokeId = crypto.randomUUID();
+  setIsDrawing(true);
+  startStroke({
+    userId,
+    strokeId,
+    point: { x, y },
+  });
+
+  const ctx = canvasRef.current.getContext("2d");
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+
+  // console.log(
+  //   "🎨 strokeStart sent for room:",
+  //   currentRoomId,
+  //   "strokeId:",
+  //   strokeId,
+  // );
+  socket.emit("strokeStart", {
+    roomId: currentRoomId,
+    strokeId,
+    point: { x, y },
+  });
+
+  // console.log(
+  //   "🎨 strokeStart emitted",
+  //   "userId:",
+  //   userId,
+  //   "strokeId:",
+  //   strokeId,
+  //   "point:",
+  //   { x, y },
+  // );
+};
+
+// ===============================
+// DRAW (RAF THROTTLED)
+// ===============================
+export const draw = (
+  e,
+  isDrawing,
+  animationFrameRef,
+  lastPointRef,
+  color,
+  brushSize,
+  addPoint,
+  canvasRef,
+  currentRoomId,
+) => {
+  if (!isDrawing) return;
+
+  const store = useCanvasStore.getState();
+  const userId = store.user.id;
+  const strokeId = store.currentStrokes[userId]?.strokeId;
+
+  // console.log("store.currentStrokes[userId]", store.currentStrokes[userId]);
+  // console.log(
+  //   "store.currentStrokes[userId]?.strokeId",
+  //   store.currentStrokes[userId]?.strokeId,
+  // );
+
+  if (!userId) {
+    console.log("Cannot add point - userId not found");
+    return;
+  }
+
+  const x = e.nativeEvent.offsetX;
+  const y = e.nativeEvent.offsetY;
+
+  lastPointRef.current = { x, y };
+
+  if (animationFrameRef.current) return;
+
+  animationFrameRef.current = requestAnimationFrame(() => {
+    const point = lastPointRef.current;
+    const ctx = canvasRef.current.getContext("2d");
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = brushSize;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    ctx.lineTo(point.x, point.y);
+    ctx.stroke();
+
+    addPoint({ userId, strokeId, point });
+
+    socket.emit("strokePoint", {
+      roomId: currentRoomId,
+      strokeId,
+      color,
+      brushSize,
+      point,
+    });
+
+    // console.log(
+    //   "🎨 strokePoint emitted",
+    //   "userId:",
+    //   userId,
+    //   "strokeId:",
+    //   strokeId,
+    //   "point:",
+    //   point,
+    // );
+
+    animationFrameRef.current = null;
+  });
+};
+
+// ===============================
+// STOP DRAW
+// ===============================
+export const stopDrawing = (
+  setIsDrawing,
+  endStroke,
+  color,
+  brushSize,
+  currentRoomId,
+) => {
+  setIsDrawing(false);
+
+  // Get the current stroke data from the store
+  const store = useCanvasStore.getState();
+  const userId = store.user.id;
+  const currentStroke = store.currentStrokes[userId];
+
+  if (currentStroke) {
+    const { strokeId, points } = currentStroke;
+
+    endStroke({ userId, strokeId, color, brushSize, points });
+
+    socket.emit("strokeEnd", {
+      roomId: currentRoomId,
+      strokeId,
+      color,
+      brushSize,
+      points,
+    });
+
+    // console.log(
+    //   "🎨 strokeEnd emitted",
+     
+    //   "strokeId:",
+    //   strokeId,
+    //   "color:",
+    //   color,
+    //   "brushSize:",
+    //   brushSize,
+    //   "points:",
+    //   points,
+    //   );
+  }
+};
+
+// ===============================
+// REDRAW FUNCTION
+// ===============================
+export const redrawCanvas = (canvasRef) => {
+  const store = useCanvasStore.getState();
+  const strokes = store.strokes;
+
+  if (!canvasRef.current) return;
+
+  const canvas = canvasRef.current;
+  const ctx = canvas.getContext("2d");
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (!strokes || !Array.isArray(strokes)) return;
+
+  strokes.forEach((stroke) => {
+    // Skip strokes without points
+    if (!stroke || !stroke.points || !Array.isArray(stroke.points)) {
+      console.warn("Skipping invalid stroke:", stroke);
+      return;
+    }
+
+    ctx.beginPath();
+    ctx.strokeStyle = stroke.color || "#ffffff";
+    ctx.lineWidth = stroke.brushSize || stroke.width || 5;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    stroke.points.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+
+    ctx.stroke();
+  });
+};
 
 
 
-is k ilawa user register, login, token verify, room create all with joi validation and global ApiError and SendResponse k thorugh
+canvasStore.js 
+
+import { useCanvasStore } from "../store/canvasStore";
+import { socket } from "../socket/socket";
+
+// ===============================
+// find the last stroke ID of a user (used for undo functionality)
+// ===============================
+export const findLastUserStrokeId = (strokes, userId) => {
+  const reversed = [...strokes].reverse();
+  const lastStroke = reversed.find((stroke) => stroke.userId === userId);
+  return lastStroke ? lastStroke.strokeId : null;
+};
+
+// ===============================
+// undo the last stroke of the current user
+// ===============================
+export const undoLastStroke = (strokes, undo, currentRoomId) => {
+  const store = useCanvasStore.getState();
+  const userId = store.user.id;
+  const lastStrokeId = findLastUserStrokeId(strokes, userId);
+  if (!lastStrokeId) return;
+
+  undo(lastStrokeId);
+
+  socket.emit("undo", {
+    roomId: currentRoomId,
+    strokeId: lastStrokeId,
+  });
+};
+
+// ===============================
+// redo the last undo stroke of the current user
+// ===============================
+export const redoLastStroke = (redo, currentRoomId) => {
+  const store = useCanvasStore.getState();
+  const undoStack = store.undoStack;
+  const userId = store.user.id;
+
+  // view this in future after refreash user can not redo
+  if (undoStack.length === 0) {
+    console.warn("⚠ Nothing to redo");
+    return;
+  }
+
+  const reversed = [...undoStack].reverse();
+
+  // find last undone stroke of this user  const reversed = [...undoStack].reverse();
+  const lastUndoneStroke = reversed.find((stroke) => stroke.userId === userId);
+  if (!lastUndoneStroke) {
+    console.warn("⚠ No undone stroke found for this user");
+    return;
+  }
+
+  redo(lastUndoneStroke);
+  // console.log("↻ Redoing stroke:", lastUndoneStroke.strokeId);
+
+  socket.emit("redo", {
+    roomId: currentRoomId,
+    strokeId: lastUndoneStroke.strokeId,
+  });
+};
+
+// ===============================
+// ROOM JOINING
+// ===============================
+export const joinRoom = (roomId, currentRoomId, clear) => {
+  if (!roomId.trim()) return;
+
+  if (currentRoomId && currentRoomId !== roomId) {
+    socket.emit("leaveRoom", currentRoomId);
+  }
+
+  console.log("📍 Joining room:", roomId);
+  socket.emit("joinRoom", { roomId });
+
+  clear();
+};
+
+// ===============================
+// START DRAW
+// ===============================
+export const startDrawing = (
+  e,
+  setIsDrawing,
+  startStroke,
+  canvasRef,
+  currentRoomId,
+) => {
+  const store = useCanvasStore.getState();
+  const userId = store.user.id;
+
+  if (!userId) {
+    // console.log("Cannot start stroke - userId not found");
+    return;
+  }
+
+  const x = e.nativeEvent.offsetX;
+  const y = e.nativeEvent.offsetY;
+  const strokeId = crypto.randomUUID();
+  setIsDrawing(true);
+  startStroke({
+    userId,
+    strokeId,
+    point: { x, y },
+  });
+
+  const ctx = canvasRef.current.getContext("2d");
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+
+  // console.log(
+  //   "🎨 strokeStart sent for room:",
+  //   currentRoomId,
+  //   "strokeId:",
+  //   strokeId,
+  // );
+  socket.emit("strokeStart", {
+    roomId: currentRoomId,
+    strokeId,
+    point: { x, y },
+  });
+
+  // console.log(
+  //   "🎨 strokeStart emitted",
+  //   "userId:",
+  //   userId,
+  //   "strokeId:",
+  //   strokeId,
+  //   "point:",
+  //   { x, y },
+  // );
+};
+
+// ===============================
+// DRAW (RAF THROTTLED)
+// ===============================
+export const draw = (
+  e,
+  isDrawing,
+  animationFrameRef,
+  lastPointRef,
+  color,
+  brushSize,
+  addPoint,
+  canvasRef,
+  currentRoomId,
+) => {
+  if (!isDrawing) return;
+
+  const store = useCanvasStore.getState();
+  const userId = store.user.id;
+  const strokeId = store.currentStrokes[userId]?.strokeId;
+
+  // console.log("store.currentStrokes[userId]", store.currentStrokes[userId]);
+  // console.log(
+  //   "store.currentStrokes[userId]?.strokeId",
+  //   store.currentStrokes[userId]?.strokeId,
+  // );
+
+  if (!userId) {
+    console.log("Cannot add point - userId not found");
+    return;
+  }
+
+  const x = e.nativeEvent.offsetX;
+  const y = e.nativeEvent.offsetY;
+
+  lastPointRef.current = { x, y };
+
+  if (animationFrameRef.current) return;
+
+  animationFrameRef.current = requestAnimationFrame(() => {
+    const point = lastPointRef.current;
+    const ctx = canvasRef.current.getContext("2d");
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = brushSize;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    ctx.lineTo(point.x, point.y);
+    ctx.stroke();
+
+    addPoint({ userId, strokeId, point });
+
+    socket.emit("strokePoint", {
+      roomId: currentRoomId,
+      strokeId,
+      color,
+      brushSize,
+      point,
+    });
+
+    // console.log(
+    //   "🎨 strokePoint emitted",
+    //   "userId:",
+    //   userId,
+    //   "strokeId:",
+    //   strokeId,
+    //   "point:",
+    //   point,
+    // );
+
+    animationFrameRef.current = null;
+  });
+};
+
+// ===============================
+// STOP DRAW
+// ===============================
+export const stopDrawing = (
+  setIsDrawing,
+  endStroke,
+  color,
+  brushSize,
+  currentRoomId,
+) => {
+  setIsDrawing(false);
+
+  // Get the current stroke data from the store
+  const store = useCanvasStore.getState();
+  const userId = store.user.id;
+  const currentStroke = store.currentStrokes[userId];
+
+  if (currentStroke) {
+    const { strokeId, points } = currentStroke;
+
+    endStroke({ userId, strokeId, color, brushSize, points });
+
+    socket.emit("strokeEnd", {
+      roomId: currentRoomId,
+      strokeId,
+      color,
+      brushSize,
+      points,
+    });
+
+    // console.log(
+    //   "🎨 strokeEnd emitted",
+     
+    //   "strokeId:",
+    //   strokeId,
+    //   "color:",
+    //   color,
+    //   "brushSize:",
+    //   brushSize,
+    //   "points:",
+    //   points,
+    //   );
+  }
+};
+
+// ===============================
+// REDRAW FUNCTION
+// ===============================
+export const redrawCanvas = (canvasRef) => {
+  const store = useCanvasStore.getState();
+  const strokes = store.strokes;
+
+  if (!canvasRef.current) return;
+
+  const canvas = canvasRef.current;
+  const ctx = canvas.getContext("2d");
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (!strokes || !Array.isArray(strokes)) return;
+
+  strokes.forEach((stroke) => {
+    // Skip strokes without points
+    if (!stroke || !stroke.points || !Array.isArray(stroke.points)) {
+      console.warn("Skipping invalid stroke:", stroke);
+      return;
+    }
+
+    ctx.beginPath();
+    ctx.strokeStyle = stroke.color || "#ffffff";
+    ctx.lineWidth = stroke.brushSize || stroke.width || 5;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    stroke.points.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+
+    ctx.stroke();
+  });
+};
 
 
-ab baki kam krna h all room get, frontend ko refactor backend k hisab se
+aur is trhn mere canvasRoom ki file h jhn ye functions call hoty hn

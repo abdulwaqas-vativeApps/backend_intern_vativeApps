@@ -4,8 +4,10 @@ export const useCanvasStore = create((set) => ({
   strokes: [],
   currentStrokes: {},
   currentRoom: null,
-  userId: null,
+  roomMembers: [],
+  user: null,
   undoStack: [], // Track undone strokes for redo
+  ghostCursors: {},
 
   startStroke: ({ userId, strokeId, point }) =>
     set((state) => ({
@@ -13,13 +15,13 @@ export const useCanvasStore = create((set) => ({
         ...state.currentStrokes,
         [userId]: { strokeId, points: [point] },
       },
-      undoStack: [], // Clear redo stack when new action is performed
+      // undoStack: [], // Clear redo stack when new action is performed
     })),
 
-  addPoint: ({ userId, point }) =>
+  addPoint: ({ userId, strokeId, point }) =>
     set((state) => {
       const existing = state.currentStrokes[userId];
-      if (!existing) return {};
+      if (!existing || existing.strokeId !== strokeId) return {};
 
       return {
         currentStrokes: {
@@ -32,17 +34,17 @@ export const useCanvasStore = create((set) => ({
       };
     }),
 
-  endStroke: ({ userId, color, brushSize }) =>
+  endStroke: ({ userId, strokeId, color, brushSize, points }) =>
     set((state) => {
       const current = state.currentStrokes[userId];
-      if (!current) return {};
+      if (!current || current.strokeId !== strokeId) return {};
 
       const finishedStroke = {
-        strokeId: current.strokeId,
+        strokeId,
         userId,
         color,
         brushSize,
-        points: current.points,
+        points,
       };
 
       const { [userId]: _, ...rest } = state.currentStrokes;
@@ -67,9 +69,9 @@ export const useCanvasStore = create((set) => ({
   redo: (stroke) =>
     set((state) => {
       if (!stroke) return {};
-      
+
       const newUndoStack = state.undoStack.filter(
-        (s) => s.strokeId !== stroke.strokeId
+        (s) => s.strokeId !== stroke.strokeId,
       );
 
       return {
@@ -85,11 +87,26 @@ export const useCanvasStore = create((set) => ({
       undoStack: [],
     }),
 
-  setCurrentRoom: (roomId) => set({ currentRoom: roomId }),
-  setStrokes: (newStrokes) => set({ strokes: newStrokes, undoStack: [] }),
-  setUserId: (id) => set({ userId: id }),
-}));
+  setGhostCursor: (userId, data) =>
+    set((state) => ({
+      ghostCursors: {
+        ...state.ghostCursors,
+        [userId]: data,
+      },
+    })),
 
+  removeGhostCursor: (userId) =>
+    set((state) => {
+      const updated = { ...state.ghostCursors };
+      delete updated[userId];
+      return { ghostCursors: updated };
+    }),
+
+  setCurrentRoom: (room) => set({ currentRoom: room }),
+  setRoomMembers: (members) => set({ roomMembers: members }),
+  setStrokes: (newStrokes) => set({ strokes: newStrokes, undoStack: [] }),
+  setUser: (user) => set({ user }),
+}));
 
 // import { create } from "zustand";
 
@@ -176,7 +193,6 @@ export const useCanvasStore = create((set) => ({
 //         redoStack: [...state.redoStack, strokeToRemove],
 //       };
 //     }),
-
 
 //   // ==================================
 //   // redo the last undo stroke of a user
