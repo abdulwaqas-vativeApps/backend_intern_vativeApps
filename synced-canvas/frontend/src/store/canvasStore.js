@@ -7,6 +7,7 @@ export const useCanvasStore = create((set) => ({
   roomMembers: [],
   user: null,
   undoStack: [], // Track undone strokes for redo
+  ghostCursors: {},
 
   startStroke: ({ userId, strokeId, point }) =>
     set((state) => ({
@@ -43,7 +44,7 @@ export const useCanvasStore = create((set) => ({
         userId,
         color,
         brushSize,
-        points
+        points,
       };
 
       const { [userId]: _, ...rest } = state.currentStrokes;
@@ -84,6 +85,21 @@ export const useCanvasStore = create((set) => ({
       strokes: [],
       currentStrokes: {},
       undoStack: [],
+    }),
+
+  setGhostCursor: (userId, data) =>
+    set((state) => ({
+      ghostCursors: {
+        ...state.ghostCursors,
+        [userId]: data,
+      },
+    })),
+
+  removeGhostCursor: (userId) =>
+    set((state) => {
+      const updated = { ...state.ghostCursors };
+      delete updated[userId];
+      return { ghostCursors: updated };
     }),
 
   setCurrentRoom: (room) => set({ currentRoom: room }),

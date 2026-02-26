@@ -112,7 +112,7 @@ export default function canvasSocket(io) {
     //----------------------------
     socket.on(
       "strokePoint",
-      ({ roomId,strokeId, color, brushSize, point }) => {
+      ({ roomId, strokeId, color, brushSize, point }) => {
         try {
           if (!socket.user) {
             return socket.emit("error", "Not authenticated");
@@ -149,7 +149,7 @@ export default function canvasSocket(io) {
     //----------------------------
     socket.on(
       "strokeEnd",
-      async ({ roomId, strokeId, color, brushSize,points }) => {
+      async ({ roomId, strokeId, color, brushSize, points }) => {
         try {
           if (!socket.user) {
             return socket.emit("error", "Not authenticated");
@@ -160,7 +160,7 @@ export default function canvasSocket(io) {
             userId: socket.user._id,
             color,
             width: brushSize,
-            points
+            points,
           });
 
           // console.log("🎨 New stroke created:", newStroke);
@@ -176,7 +176,7 @@ export default function canvasSocket(io) {
         }
       },
     );
- 
+
     // ---------------------------
     // Undo (Soft Delete)
     // ---------------------------
@@ -265,6 +265,21 @@ export default function canvasSocket(io) {
         socket.emit("error", "Unable to clear strokes");
       }
     });
+
+    // ---------------------------
+    // CURSOR MOVE (Presence)
+    // ---------------------------
+    socket.on("cursorMove", ({ roomId, x, y }) => {
+      if (!socket.user) return;
+
+      socket.to(roomId).emit("cursorMove", {
+        userId: socket.user._id.toString(),
+        username: socket.user.username,
+        x,
+        y,
+      });
+    });
+
     // ---------------------------
     // Disconnect
     // ---------------------------
@@ -290,7 +305,9 @@ export default function canvasSocket(io) {
           "username email",
         );
 
+
         // Notify other users in that room
+        io.to(room._id.toString()).emit("userDisconnected", socket.user?._id.toString());
         io.to(room._id.toString()).emit("roomMembers", updatedRoom.members);
       }
 

@@ -190,6 +190,10 @@ export const draw = (
       point,
     });
 
+    console.log(
+      "🎨 strokePoint sent for room:",
+      point)
+
     // console.log(
     //   "🎨 strokePoint emitted",
     //   "userId:",

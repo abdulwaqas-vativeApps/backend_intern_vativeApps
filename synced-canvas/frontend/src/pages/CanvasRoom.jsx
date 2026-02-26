@@ -27,7 +27,7 @@ import {
   User,
   Brush,
   Crown,
-  Paintbrush
+  Paintbrush,
 } from "lucide-react";
 
 export default function CanvasRoom() {
@@ -50,13 +50,15 @@ export default function CanvasRoom() {
   const setCurrentRoom = useCanvasStore((state) => state.setCurrentRoom);
   const setStrokes = useCanvasStore((state) => state.setStrokes);
   const setUser = useCanvasStore((state) => state.setUser);
+  const ghostCursors = useCanvasStore((state) => state.ghostCursors);
+  const setGhostCursor = useCanvasStore((state) => state.setGhostCursor);
 
   const [color, setColor] = useState("#000000");
   const [brushSize, setBrushSize] = useState(5);
   const [isDrawing, setIsDrawing] = useState(false);
   const [showMembers, setShowMembers] = useState(true);
   const [showColorPicker, setShowColorPicker] = useState(false);
-  
+
   const navigate = useNavigate();
 
   // ===============================
@@ -98,23 +100,26 @@ export default function CanvasRoom() {
       ctx.moveTo(point.x, point.y);
     });
 
-    socket.on("strokePoint", ({ userId, strokeId, color, brushSize, point }) => {
-      const store = useCanvasStore.getState();
-      if (!store.currentStrokes[userId]) return;
+    socket.on(
+      "strokePoint",
+      ({ userId, strokeId, color, brushSize, point }) => {
+        const store = useCanvasStore.getState();
+        if (!store.currentStrokes[userId]) return;
 
-      const ctx = canvasRef.current.getContext("2d");
-      ctx.strokeStyle = color;
-      ctx.lineWidth = brushSize;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
+        const ctx = canvasRef.current.getContext("2d");
+        ctx.strokeStyle = color;
+        ctx.lineWidth = brushSize;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
 
-      ctx.lineTo(point.x, point.y);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(point.x, point.y);
+        ctx.lineTo(point.x, point.y);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(point.x, point.y);
 
-      addPoint({ userId, strokeId, point });
-    });
+        addPoint({ userId, strokeId, point });
+      },
+    );
 
     socket.on("strokeComplete", (stroke) => {
       endStroke(stroke);
@@ -141,6 +146,18 @@ export default function CanvasRoom() {
       setStrokes(strokes);
     });
 
+    socket.on("cursorMove", (data) => {
+      setGhostCursor(data.userId, {
+        x: data.x,
+        y: data.y,
+        username: data.username,
+      });
+    });
+
+    socket.on("userDisconnected", ({ userId }) => {
+      useCanvasStore.getState().removeGhostCursor(userId);
+    });
+
     return () => {
       socket.off("roomInfo");
       socket.off("error");
@@ -152,6 +169,8 @@ export default function CanvasRoom() {
       socket.off("clear");
       socket.off("roomHistory");
       socket.off("roomMembers");
+      socket.off("cursorMove");
+      socket.off("userDisconnected");
     };
   }, []);
 
@@ -163,11 +182,11 @@ export default function CanvasRoom() {
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
-    
+
     // Pure white background
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
+
     // Set drawing properties
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -225,7 +244,7 @@ export default function CanvasRoom() {
               >
                 <ChevronLeft className="h-5 w-5" />
               </button>
-              
+
               <div className="flex items-center space-x-3">
                 <div className="p-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600">
                   <Home className="h-5 w-5 text-white" />
@@ -233,7 +252,7 @@ export default function CanvasRoom() {
                 <div>
                   <div className="flex items-center space-x-2">
                     <h1 className="text-lg font-bold text-gray-800">
-                      {currentRoom?.name || 'Canvas Room'}
+                      {currentRoom?.name || "Canvas Room"}
                     </h1>
                     {isRoomOwner && (
                       <span className="flex items-center space-x-1 bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full text-xs font-medium">
@@ -264,7 +283,9 @@ export default function CanvasRoom() {
                 title="Logout"
               >
                 <LogOut className="h-4 w-4" />
-                <span className="text-sm font-medium hidden sm:inline">Logout</span>
+                <span className="text-sm font-medium hidden sm:inline">
+                  Logout
+                </span>
               </button>
             </div>
           </div>
@@ -274,9 +295,9 @@ export default function CanvasRoom() {
       {/* Main Content */}
       <div className="flex h-[calc(100vh-4rem)]">
         {/* Members Sidebar */}
-        <div 
+        <div
           className={`${
-            showMembers ? 'w-72' : 'w-12'
+            showMembers ? "w-72" : "w-12"
           } bg-white border-r border-gray-200 transition-all duration-300 flex flex-col shadow-lg`}
         >
           {/* Sidebar Header */}
@@ -313,14 +334,14 @@ export default function CanvasRoom() {
             <div className="flex-1 overflow-y-auto p-3">
               {roomMembers.map((member) => {
                 const isOwner = currentRoom?.createdBy?._id === member._id;
-                
+
                 return (
                   <div
                     key={member._id}
                     className={`flex items-center space-x-3 p-3 rounded-lg mb-2 transition-colors ${
-                      member._id === user?.id 
-                        ? 'bg-blue-50 border border-blue-200'
-                        : 'hover:bg-gray-50 border border-transparent'
+                      member._id === user?.id
+                        ? "bg-blue-50 border border-blue-200"
+                        : "hover:bg-gray-50 border border-transparent"
                     }`}
                   >
                     <div className="relative">
@@ -330,13 +351,15 @@ export default function CanvasRoom() {
                         </span>
                       </div>
                     </div>
-                    
+
                     <div className="flex-1">
                       <div className="flex items-center space-x-2">
                         <p className="text-sm font-medium text-gray-800">
                           {member.username}
                           {member._id === user?.id && (
-                            <span className="text-blue-600 text-xs ml-1">(you)</span>
+                            <span className="text-blue-600 text-xs ml-1">
+                              (you)
+                            </span>
                           )}
                         </p>
                         {isOwner && (
@@ -366,13 +389,13 @@ export default function CanvasRoom() {
                 title="Choose color"
               >
                 <div className="w-10 h-10 rounded-lg border-2 border-gray-300 shadow-sm group-hover:shadow-md transition-shadow overflow-hidden">
-                  <div 
+                  <div
                     className="w-full h-full"
                     style={{ backgroundColor: color }}
                   ></div>
                 </div>
               </button>
-              
+
               {showColorPicker && (
                 <div className="absolute top-20 left-6 p-4 bg-white rounded-xl shadow-2xl border border-gray-200 z-10">
                   <div className="flex items-center justify-between mb-3">
@@ -422,7 +445,9 @@ export default function CanvasRoom() {
                 title="Undo (Ctrl+Z)"
               >
                 <Undo2 className="h-4 w-4" />
-                <span className="text-sm font-medium hidden sm:inline">Undo</span>
+                <span className="text-sm font-medium hidden sm:inline">
+                  Undo
+                </span>
               </button>
 
               <button
@@ -431,17 +456,26 @@ export default function CanvasRoom() {
                 title="Redo (Ctrl+Y)"
               >
                 <Redo2 className="h-4 w-4" />
-                <span className="text-sm font-medium hidden sm:inline">Redo</span>
+                <span className="text-sm font-medium hidden sm:inline">
+                  Redo
+                </span>
               </button>
 
               <button
                 onClick={() => {
-                  if (window.confirm('Are you sure you want to clear the canvas?')) {
+                  if (
+                    window.confirm("Are you sure you want to clear the canvas?")
+                  ) {
                     clear();
                     socket.emit("clear", { roomId: currentRoom?.id });
                     const ctx = canvasRef.current.getContext("2d");
                     ctx.fillStyle = "#ffffff";
-                    ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+                    ctx.fillRect(
+                      0,
+                      0,
+                      canvasRef.current.width,
+                      canvasRef.current.height,
+                    );
                     toast.success("Canvas cleared");
                   }
                 }}
@@ -449,28 +483,69 @@ export default function CanvasRoom() {
                 title="Clear canvas"
               >
                 <Trash2 className="h-4 w-4" />
-                <span className="text-sm font-medium hidden sm:inline">Clear</span>
+                <span className="text-sm font-medium hidden sm:inline">
+                  Clear
+                </span>
               </button>
             </div>
           </div>
 
           {/* Canvas Container */}
-          <div className="flex-1 flex items-center justify-center bg-gray-100 rounded-xl p-4 shadow-inner">
+          <div className="flex-1 flex items-center justify-center bg-gray-100 rounded-xl p-4 shadow-inner relative">
+            {/* ADDED FOR CURSOR PRESENCE */}
+            <div className="absolute inset-0 pointer-events-none">
+              {Object.entries(ghostCursors || {}).map(([userId, cursor]) => (
+                <div
+                  key={userId}
+                  className="absolute flex flex-col items-center transition-all duration-75"
+                  style={{
+                    left: cursor.x,
+                    top: cursor.y,
+                    transform: "translate(-50%, -50%)",
+                  }}
+                >
+                  <div className="text-xs bg-black text-white px-2 py-1 rounded-md shadow-md">
+                    {cursor.username}
+                  </div>
+                  <div className="w-3 h-3 bg-blue-500 rounded-full mt-1 opacity-80"></div>
+                </div>
+              ))}
+            </div>
+
             <canvas
               ref={canvasRef}
               width={900}
               height={500}
               className="border-2 border-gray-300 rounded-xl shadow-2xl bg-white"
-              style={{ 
-                maxWidth: '100%', 
-                height: 'auto',
-                cursor: isDrawing ? 'crosshair' : 'default',
-                touchAction: 'none'
+              style={{
+                maxWidth: "100%",
+                height: "auto",
+                cursor: isDrawing ? "crosshair" : "default",
+                touchAction: "none",
               }}
               onMouseDown={(e) =>
-                startDrawing(e, setIsDrawing, startStroke, canvasRef, currentRoom?.id)
+                startDrawing(
+                  e,
+                  setIsDrawing,
+                  startStroke,
+                  canvasRef,
+                  currentRoom?.id,
+                )
               }
-              onMouseMove={(e) =>
+              onMouseMove={(e) => {
+                //  ADDED FOR CURSOR PRESENCE
+                if (currentRoom?.id) {
+                  const x = e.nativeEvent.offsetX;
+                  const y = e.nativeEvent.offsetY;
+
+                  // console.log("Emitting cursorMove", { x, y, roomId: currentRoom.id });
+
+                  socket.emit("cursorMove", {
+                    roomId: currentRoom.id,
+                    x,
+                    y,
+                  });
+                }
                 draw(
                   e,
                   isDrawing,
@@ -481,8 +556,8 @@ export default function CanvasRoom() {
                   addPoint,
                   canvasRef,
                   currentRoom?.id,
-                )
-              }
+                );
+              }}
               onMouseUp={() =>
                 stopDrawing(
                   setIsDrawing,
@@ -508,10 +583,6 @@ export default function CanvasRoom() {
     </div>
   );
 }
-
-
-
-
 
 // import { useRef, useEffect, useState } from "react";
 // import { useNavigate, useParams } from "react-router-dom";
