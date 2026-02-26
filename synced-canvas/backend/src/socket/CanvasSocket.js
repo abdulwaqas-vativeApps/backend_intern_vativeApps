@@ -3,7 +3,7 @@ import Stroke from "../models/Stroke.js";
 
 export default function canvasSocket(io) {
   io.on("connection", (socket) => {
-    console.log("User connected:", socket.id);
+    console.log("User connected:", socket.id, "name:", socket.user?.username);
 
     // ---------------------------
     // Join Room + Send History
@@ -35,22 +35,20 @@ export default function canvasSocket(io) {
         }
 
         // IMPORTANT: Populate AFTER update
-        room = await Room.findById(roomId).populate(
-          "members",
-          "username email",
-        );
+        room = await Room.findById(roomId)
+          .populate("members", "username email")
+          .populate("createdBy", "username email");
 
         socket.join(roomId);
 
-        console.log(`✓ ${socket.user.username} joined room ${room.name}`);
-
         // Notify others (only new join)
-        io.to(roomId).emit("roomUsers", room.members);
+        io.to(roomId).emit("roomMembers", room.members);
 
         // Send room info WITH populated members
         socket.emit("roomInfo", {
-          userId: userId.toString(),
-          room,
+          id: room._id,
+          name: room.name,
+          createdBy: room.createdBy,
         });
 
         // Send strokes history
@@ -71,7 +69,7 @@ export default function canvasSocket(io) {
     // ---------------------------
     socket.on("leaveRoom", async (roomId) => {
       const userId = socket.user._id;
-      const room = await Room.findById(roomId);
+      let room = await Room.findById(roomId);
 
       if (!room) {
         return socket.emit("error", "Room not found");
@@ -86,13 +84,17 @@ export default function canvasSocket(io) {
       room = await Room.findById(roomId).populate("members", "username email");
 
       socket.leave(roomId);
-      io.to(roomId).emit("roomUsers", room.members);
+      io.to(roomId).emit("roomMembers", room.members);
+      io.to(roomId).emit(
+        "userDisconnected",
+        userId,
+      );
     });
 
     // ---------------------------
     // Stroke Start (Emit to others in room)
     // ---------------------------
-    socket.on("strokeStart", ({ roomId, point, strokeId }) => {
+    socket.on("strokeStart", ({ roomId, strokeId, point }) => {
       try {
         if (!socket.user) {
           return socket.emit("error", "Not authenticated");
@@ -104,7 +106,7 @@ export default function canvasSocket(io) {
           point,
         });
       } catch (err) {
-        console.error("strokeStart error:", err.message);
+        // console.error("strokeStart error:", err.message);
         socket.emit("error", "Failed to start stroke");
       }
     });
@@ -114,17 +116,30 @@ export default function canvasSocket(io) {
     //----------------------------
     socket.on(
       "strokePoint",
-      ({ roomId, point, strokeId, color, brushSize }) => {
+      ({ roomId, strokeId, color, brushSize, point }) => {
         try {
           if (!socket.user) {
             return socket.emit("error", "Not authenticated");
           }
+          // console.log(
+          //   "🎨 strokePoint received ",
+          //   "userId:",
+          //   socket.user._id.toString(),
+          //   "strokeId:",
+          //   strokeId,
+          //   "color:",
+          //   color,
+          //   "brushSize:",
+          //   brushSize,
+          //   "point:",
+          //   point,
+          // );
           socket.to(roomId).emit("strokePoint", {
             userId: socket.user._id.toString(),
             strokeId,
-            point,
             color,
             brushSize,
+            point,
           });
         } catch (err) {
           console.error("strokePoint error:", err.message);
@@ -138,7 +153,7 @@ export default function canvasSocket(io) {
     //----------------------------
     socket.on(
       "strokeEnd",
-      async ({ roomId, points, strokeId, color, brushSize }) => {
+      async ({ roomId, strokeId, color, brushSize, points }) => {
         try {
           if (!socket.user) {
             return socket.emit("error", "Not authenticated");
@@ -147,15 +162,17 @@ export default function canvasSocket(io) {
             strokeId, // frontend strokeId
             roomId,
             userId: socket.user._id,
-            points,
             color,
             width: brushSize,
+            points,
           });
+
+          // console.log("🎨 New stroke created:", newStroke);
 
           // Emit strokeComplete with DB _id + strokeId to ALL users in room (including sender)
           io.to(roomId).emit("strokeComplete", {
             ...newStroke.toObject(),
-            strokeId: newStroke.strokeId, // keep frontend strokeId
+            strokeId: newStroke.strokeId, // frontend strokeId for matching
           });
         } catch (err) {
           console.error("strokeEnd error:", err.message);
@@ -216,7 +233,7 @@ export default function canvasSocket(io) {
             isDeleted: true,
           });
         } else {
-          // Otherwise, redo the last deleted stroke
+          // Otherwise, redo the last deleted stroke (currently ignore this)
           stroke = await Stroke.findOne({
             roomId,
             userId: socket.user._id,
@@ -229,10 +246,12 @@ export default function canvasSocket(io) {
         stroke.isDeleted = false;
         await stroke.save();
 
-        io.to(roomId).emit("strokeComplete", {
+        io.to(roomId).emit("redoStroke", {
           ...stroke.toObject(),
           strokeId: stroke.strokeId,
         });
+
+        console.log(`↻ Redo for strokeId:`, stroke.strokeId);
       } catch (err) {
         console.error("redo error:", err.message);
         socket.emit("error", "Unable to redo stroke");
@@ -250,36 +269,57 @@ export default function canvasSocket(io) {
         socket.emit("error", "Unable to clear strokes");
       }
     });
+
+    // ---------------------------
+    // CURSOR MOVE (Presence)
+    // ---------------------------
+    socket.on("cursorMove", ({ roomId, x, y }) => {
+      if (!socket.user) return;
+
+      console.log("Cursor move from user:", socket.user.username, "at", { x, y });
+
+      socket.to(roomId).emit("cursorMove", {
+        userId: socket.user._id.toString(),
+        username: socket.user.username,
+        x,
+        y,
+      });
+    });
+
     // ---------------------------
     // Disconnect
     // ---------------------------
- socket.on("disconnect", async () => {
-    console.log("✗ User disconnected:", socket.id);
-    if (!socket.user) return;
+    socket.on("disconnect", async () => {
+      console.log("✗ User disconnected:", socket.id);
+      if (!socket.user) return;
 
-    const userId = socket.user._id;
+      const userId = socket.user._id;
 
-    // Find all rooms user was in
-    const rooms = await Room.find({ members: userId });
+      // Find all rooms user was in
+      const rooms = await Room.find({ members: userId });
 
-    for (let room of rooms) {
-      // Remove user from members
-      room.members = room.members.filter(
-        (member) => member.toString() !== userId.toString()
-      );
-      await room.save();
+      for (let room of rooms) {
+        // Remove user from members (user at a time aik hi room m hoga, but phir bhi ye safety k lien)
+        room.members = room.members.filter(
+          (member) => member.toString() !== userId.toString(),
+        );
+        await room.save();
 
-      // Populate members after update
-      const updatedRoom = await Room.findById(room._id).populate(
-        "members",
-        "username email"
-      );
+        // Populate members after update
+        const updatedRoom = await Room.findById(room._id).populate(
+          "members",
+          "username email",
+        );
 
-      // Notify other users in that room
-      io.to(room._id.toString()).emit("roomUsers", updatedRoom.members);
-    }
+        // Notify other users in that room
+        io.to(room._id.toString()).emit(
+          "userDisconnected",
+          userId,
+        );
+        io.to(room._id.toString()).emit("roomMembers", updatedRoom.members);
+      }
 
-    console.log("  User was:", socket.user.username, `(${userId})`);
-  });
+      console.log("  User was:", socket.user.username, `(${userId})`);
+    });
   });
 }

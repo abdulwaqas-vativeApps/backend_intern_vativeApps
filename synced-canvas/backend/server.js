@@ -23,12 +23,14 @@ const server = http.createServer(app);
 // Socket.io setup with JWT authentication
 // ---------------------------
 const io = new Server(server, {
-  cors: { origin: "http://localhost:5173", methods: ["GET", "POST"] },
+  cors: { origin: "http://localhost:5173", methods: ["GET", "POST"] }, 
 });
 
 io.use(async (socket, next) => {
   try {
     const token = socket.handshake.auth.token;
+
+    console.log("Socket io.use", "token:", token);
 
     if (!token) throw new ApiError(401, "No token provided");
 
@@ -37,10 +39,13 @@ io.use(async (socket, next) => {
     const user = await User.findById(decoded.id).select("-password");
     if (!user) throw new ApiError(401, "User not found");
 
+    console.log("io.use user ==>:", user);
+
     socket.user = user;
 
     next();
   } catch (err) {
+    console.log("io.use error:", err);
     next(err || new ApiError(401, "Not authorized"));
   }
 });
