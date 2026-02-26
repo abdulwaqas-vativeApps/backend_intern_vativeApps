@@ -154,7 +154,8 @@ export default function CanvasRoom() {
       });
     });
 
-    socket.on("userDisconnected", ({ userId }) => {
+    socket.on("userDisconnected", (userId) => {
+      console.log("User disconnected on:", userId);
       useCanvasStore.getState().removeGhostCursor(userId);
     });
 
@@ -218,12 +219,12 @@ export default function CanvasRoom() {
   // Handle logout
   const handleLogout = () => {
     localStorage.removeItem("token");
+    if (currentRoom && currentRoom.id) {
+      socket.emit("leaveRoom", currentRoom.id);
+    }
     toast.success("Logged out successfully");
     navigate("/login");
 
-    if (currentRoom && currentRoom._id) {
-      socket.emit("leaveRoom", currentRoom._id);
-    }
   };
 
   // Check if current user is room owner

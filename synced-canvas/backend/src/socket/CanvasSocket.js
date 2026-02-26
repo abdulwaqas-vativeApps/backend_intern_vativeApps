@@ -85,6 +85,10 @@ export default function canvasSocket(io) {
 
       socket.leave(roomId);
       io.to(roomId).emit("roomMembers", room.members);
+      io.to(roomId).emit(
+        "userDisconnected",
+        userId,
+      );
     });
 
     // ---------------------------
@@ -272,6 +276,8 @@ export default function canvasSocket(io) {
     socket.on("cursorMove", ({ roomId, x, y }) => {
       if (!socket.user) return;
 
+      console.log("Cursor move from user:", socket.user.username, "at", { x, y });
+
       socket.to(roomId).emit("cursorMove", {
         userId: socket.user._id.toString(),
         username: socket.user.username,
@@ -305,9 +311,11 @@ export default function canvasSocket(io) {
           "username email",
         );
 
-
         // Notify other users in that room
-        io.to(room._id.toString()).emit("userDisconnected", socket.user?._id.toString());
+        io.to(room._id.toString()).emit(
+          "userDisconnected",
+          userId,
+        );
         io.to(room._id.toString()).emit("roomMembers", updatedRoom.members);
       }
 

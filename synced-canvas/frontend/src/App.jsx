@@ -1,15 +1,14 @@
-// src/App.jsx
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import RegisterPage from "./pages/Register";
 import LoginPage from "./pages/Login";
 import RoomsPage from "./pages/AllRooms";
-import CanvasBoard from "./components/CanvasBoard";
 import CanvasRoom from "./pages/CanvasRoom";
 import { Toaster } from "react-hot-toast";
 
 function App() {
   // simple auth check based on token
   const token = localStorage.getItem("token");
+  console.log("App.jsx - token:", token);
 
 
   return (

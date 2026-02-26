@@ -22,7 +22,6 @@ export default function LoginPage() {
       
       // Save token and username
       localStorage.setItem("token", data.data.token);
-      localStorage.setItem("username", data.data.user.username);
       
       toast.success(data.message || "Login successful!");
       
